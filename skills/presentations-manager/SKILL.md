@@ -1,5 +1,6 @@
 ---
 name: presentations-manager
+license: MIT
 description: >-
   Creates or fully replaces HTML presentations on the unified presentations
   manager (Cloudflare Worker) using the Bearer Skill API. Use when the user asks
@@ -103,7 +104,7 @@ curl -sS -X POST "$ORIGIN/admin/api/v1/skill/presentations" \
 curl -sS -X PUT "$ORIGIN/admin/api/v1/skill/presentations/my-deck" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"name":"My Deck","access":{"mode":"public"},"files":[{"path":"index.html","contentType":"text/html","data":"PGh0bWw+PC9odG1sPg=="}]}'
+  -d '{"name":"My Deck","access":{"mode":"public"},"files":[{"path":"index.html","contentType":"text/html","data":"<BASE64_ENCODED_FILE_CONTENT>"}]}'
 ```
 
 ## Bundled Script: update_presentation.js

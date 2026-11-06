@@ -302,3 +302,27 @@ test('authenticateAdminLogin allows ADMIN_USERNAME and ADMIN_PASSWORD env overri
 	assert.equal(await authenticateAdminLogin(db, 'recovered_owner', 'OwnerNewPass888!', {}), true);
 });
 
+test('CLI scripts enforce shell=false process execution, path-traversal sandboxing, O_NOFOLLOW symlink checks, and skill license', () => {
+	const backfillSrc = fs.readFileSync(
+		path.join(rootDir, 'scripts/backfill-presentation-dates.js'),
+		'utf8'
+	);
+	assert.doesNotMatch(backfillSrc, /\bexecSync\b/);
+	assert.match(backfillSrc, /\bexecFileSync\b/);
+	assert.match(backfillSrc, /shell:\s*false/);
+
+	const skillScriptSrc = fs.readFileSync(
+		path.join(rootDir, 'skills/presentations-manager/scripts/update_presentation.js'),
+		'utf8'
+	);
+	assert.match(skillScriptSrc, /O_NOFOLLOW/);
+	assert.match(skillScriptSrc, /fstatSync/);
+	assert.match(skillScriptSrc, /Path traversal blocked/);
+
+	const skillMd = fs.readFileSync(
+		path.join(rootDir, 'skills/presentations-manager/SKILL.md'),
+		'utf8'
+	);
+	assert.match(skillMd, /^license:\s*MIT$/m);
+});
+

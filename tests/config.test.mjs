@@ -16,8 +16,8 @@ test('wrangler.jsonc configures DB, BUCKET, SESSION, and branding vars with safe
 	assert.doesNotMatch(raw, /YOUR_PREVIEW_KV_NAMESPACE_ID/);
 	assert.doesNotMatch(raw, /SESSION_SECRET/);
 	assert.doesNotMatch(raw, /single-page-application/);
-	assert.doesNotMatch(raw, /911d2b94-2e1e-420b-aef0-ec16bdac5a15/);
-	assert.doesNotMatch(raw, /2ef80afa62094235a683a4eaf59ffa01/);
+	assert.doesNotMatch(raw, /911d2b94-2e1e-420b/);
+	assert.doesNotMatch(raw, /2ef80afa62094235/);
 	assert.doesNotMatch(raw, /innovaitionpartners/i);
 });
 
@@ -39,4 +39,16 @@ test('package.json configures Deploy to Cloudflare scripts (using DB binding) an
 	assert.ok(pkg.cloudflare?.bindings?.DB?.description);
 	assert.ok(pkg.cloudflare?.bindings?.BUCKET?.description);
 	assert.ok(pkg.cloudflare?.bindings?.SESSION?.description);
+});
+
+test('repository includes MIT LICENSE, SECURITY.md disclosure policy, and package.json license field', () => {
+	const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
+	assert.equal(pkg.license, 'MIT');
+
+	const license = fs.readFileSync(path.join(rootDir, 'LICENSE'), 'utf8');
+	assert.match(license, /^MIT License/m);
+	assert.match(license, /Permission is hereby granted, free of charge/);
+
+	const securityMd = fs.readFileSync(path.join(rootDir, 'SECURITY.md'), 'utf8');
+	assert.match(securityMd, /Security Policy/i);
 });

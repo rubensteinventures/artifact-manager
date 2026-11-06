@@ -1,6 +1,7 @@
 {
   "name": "artifact-manager",
   "version": "1.0.0",
+  "license": "MIT",
   "private": true,
   "type": "module",
   "description": "Unified Cloudflare Worker for serving and administering HTML presentations from R2",

@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import https from 'node:https';
 import { fileURLToPath } from 'node:url';
 
@@ -13,7 +13,18 @@ const home = os.homedir();
 const bucketName = process.env.R2_BUCKET_NAME || 'presentation-content';
 const dbName = process.env.D1_DATABASE_NAME || 'presentations_db';
 
-console.log(`Starting presentation backfill script (Environment: ${isRemote ? 'REMOTE' : 'LOCAL'})...`);
+if (!/^[a-zA-Z0-9_-]{1,64}$/.test(dbName)) {
+	throw new Error(`Security Exception: Invalid database name '${dbName}'`);
+}
+
+function scrubSensitiveData(message) {
+	if (typeof message !== 'string') return String(message);
+	return message.replace(/Bearer\s+[a-zA-Z0-9._-]+/gi, 'Bearer [REDACTED]');
+}
+
+console.log(
+	`Starting presentation backfill script (Environment: ${isRemote ? 'REMOTE' : 'LOCAL'})...`
+);
 
 function getOAuthToken() {
 	const envToken = process.env.CLOUDFLARE_API_TOKEN || process.env.CF_API_TOKEN;
@@ -37,15 +48,15 @@ function getOAuthToken() {
 
 function getAccountId() {
 	const envAccountId = process.env.CLOUDFLARE_ACCOUNT_ID || process.env.CF_ACCOUNT_ID;
-	if (envAccountId) {
-		return envAccountId;
+	if (envAccountId && /^[a-f0-9]{32}$/i.test(envAccountId.trim())) {
+		return envAccountId.trim();
 	}
 
 	const cachePath = path.join(home, '.wrangler', 'cache', 'wrangler-account.json');
 	if (fs.existsSync(cachePath)) {
 		try {
 			const data = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
-			if (data.account && data.account.id) {
+			if (data.account && typeof data.account.id === 'string' && /^[a-f0-9]{32}$/i.test(data.account.id)) {
 				return data.account.id;
 			}
 		} catch {
@@ -54,7 +65,10 @@ function getAccountId() {
 	}
 
 	try {
-		const output = execSync('npx wrangler whoami', { encoding: 'utf8' });
+		const output = execFileSync('npx', ['wrangler', 'whoami'], {
+			encoding: 'utf8',
+			shell: false,
+		});
 		const match = output.match(/([a-f0-9]{32})/i);
 		if (match) {
 			return match[1];
@@ -93,9 +107,19 @@ function getLocalR2SqlitePath() {
 
 function getPresentations() {
 	const flag = isRemote ? '--remote' : '--local';
-	const command = `npx wrangler d1 execute ${dbName} ${flag} --command="SELECT slug, name, uploaded_at FROM presentations" --json`;
-
-	const output = execSync(command, { encoding: 'utf8' });
+	const output = execFileSync(
+		'npx',
+		[
+			'wrangler',
+			'd1',
+			'execute',
+			dbName,
+			flag,
+			'--command=SELECT slug, name, uploaded_at FROM presentations',
+			'--json',
+		],
+		{ encoding: 'utf8', shell: false }
+	);
 	const parsed = JSON.parse(output);
 	const result = parsed[0];
 	if (!result || !result.success) {
@@ -114,10 +138,10 @@ function getLocalR2Files(slug, sqlitePath) {
 	}
 
 	const query = `SELECT key, uploaded FROM _mf_objects WHERE key LIKE 'content/${slug}/%'`;
-	const command = `sqlite3 "${sqlitePath}" "${query}" -json`;
 	try {
-		const output = execSync(command, {
+		const output = execFileSync('sqlite3', [sqlitePath, query, '-json'], {
 			encoding: 'utf8',
+			shell: false,
 			stdio: ['pipe', 'pipe', 'pipe'],
 		}).trim();
 		if (!output) return [];
@@ -125,7 +149,7 @@ function getLocalR2Files(slug, sqlitePath) {
 	} catch (e) {
 		let isSqlite3Missing = false;
 		try {
-			execSync('which sqlite3', { stdio: 'ignore' });
+			execFileSync('which', ['sqlite3'], { shell: false, stdio: 'ignore' });
 		} catch {
 			isSqlite3Missing = true;
 		}
@@ -138,7 +162,9 @@ function getLocalR2Files(slug, sqlitePath) {
 			throw new Error(`Missing system dependency: 'sqlite3' CLI utility is required.`);
 		}
 
-		console.error(`Error querying local R2 sqlite DB for slug '${slug}': ${e.message}`);
+		console.error(
+			`Error querying local R2 sqlite DB for slug '${slug}': ${scrubSensitiveData(e.message)}`
+		);
 		return [];
 	}
 }
@@ -151,7 +177,7 @@ function getRemoteR2Files(slug, accountId, oauthToken) {
 	}
 
 	return new Promise((resolve, reject) => {
-		const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/r2/buckets/${encodeURIComponent(bucketName)}/objects?prefix=content/${slug}/`;
+		const url = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(accountId)}/r2/buckets/${encodeURIComponent(bucketName)}/objects?prefix=content/${slug}/`;
 		const options = {
 			headers: {
 				Authorization: `Bearer ${oauthToken}`,
@@ -165,14 +191,18 @@ function getRemoteR2Files(slug, accountId, oauthToken) {
 				res.on('end', () => {
 					if (res.statusCode !== 200) {
 						return reject(
-							new Error(`API responded with status ${res.statusCode}: ${data}`)
+							new Error(
+								`API responded with status ${res.statusCode}: ${scrubSensitiveData(data)}`
+							)
 						);
 					}
 					try {
 						const parsed = JSON.parse(data);
 						if (!parsed.success) {
 							return reject(
-								new Error(`Cloudflare API error: ${JSON.stringify(parsed.errors)}`)
+								new Error(
+									`Cloudflare API error: ${scrubSensitiveData(JSON.stringify(parsed.errors))}`
+								)
 							);
 						}
 						resolve(parsed.result || []);
@@ -189,12 +219,17 @@ function updatePresentationUploadedAt(slug, uploadedAt) {
 	if (!/^[a-z0-9-]+$/i.test(slug)) {
 		throw new Error(`Security Exception: Invalid characters in slug '${slug}'`);
 	}
+	if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(uploadedAt)) {
+		throw new Error(`Security Exception: Invalid ISO timestamp '${uploadedAt}'`);
+	}
 
 	const flag = isRemote ? '--remote' : '--local';
-	const safeUploadedAt = uploadedAt.replace(/'/g, "''");
-	const command = `npx wrangler d1 execute ${dbName} ${flag} --command="UPDATE presentations SET uploaded_at = '${safeUploadedAt}' WHERE slug = '${slug}'" --json`;
-
-	const output = execSync(command, { encoding: 'utf8' });
+	const sql = `UPDATE presentations SET uploaded_at = '${uploadedAt}' WHERE slug = '${slug}'`;
+	const output = execFileSync(
+		'npx',
+		['wrangler', 'd1', 'execute', dbName, flag, `--command=${sql}`, '--json'],
+		{ encoding: 'utf8', shell: false }
+	);
 	const parsed = JSON.parse(output);
 	if (!parsed[0] || !parsed[0].success) {
 		throw new Error(`Failed to update D1: ${JSON.stringify(parsed)}`);
@@ -276,7 +311,7 @@ async function main() {
 		console.log('Backfill process complete!');
 		process.exit(0);
 	} catch (err) {
-		console.error(`Fatal error in backfill script: ${err.message}`);
+		console.error(`Fatal error in backfill script: ${scrubSensitiveData(err.message)}`);
 		process.exit(1);
 	}
 }

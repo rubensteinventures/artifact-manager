@@ -54,8 +54,9 @@ Clicking **Deploy to Cloudflare** automates the entire setup on your Cloudflare 
 ### Optional: Environment Variable Override & Account Recovery (`ADMIN_USERNAME` / `ADMIN_PASSWORD`)
 
 You can also configure `ADMIN_USERNAME` and `ADMIN_PASSWORD` (at least 8 characters) as Worker variables/secrets in the Cloudflare Dashboard (**Workers & Pages → your worker → Settings → Variables and Secrets**):
-- **Zero-Touch Initial Setup:** If `ADMIN_USERNAME` and `ADMIN_PASSWORD` are set before your first visit, `/admin/setup` is skipped automatically and signing in at `/admin/login` with those credentials initializes your admin record in D1.
-- **Lost Username / Password Recovery:** Even after an administrator account already exists in D1, setting `ADMIN_USERNAME` and `ADMIN_PASSWORD` and logging in at `/admin/login` will reset/upsert that administrator's bcrypt hash in D1. Once you have signed in, you can remove `ADMIN_USERNAME` and `ADMIN_PASSWORD` from the Cloudflare Dashboard and your new credentials will remain saved in D1.
+- **Zero-Touch Initial Setup:** If `ADMIN_USERNAME` and `ADMIN_PASSWORD` are set before your first visit, `/admin/setup` is skipped automatically and signing in once at `/admin/login` with those credentials hashes and saves your admin record in D1.
+- **Delete After Initial Sign-In (Recommended):** Once you have signed in at `/admin/login` after initial deployment, **you can and should delete `ADMIN_USERNAME` and `ADMIN_PASSWORD`** from your Worker's Variables and Secrets. Because your bcrypt password hash is now stored in D1, those environment variables are no longer needed for normal operation.
+- **Emergency Username / Password Recovery:** If you ever lose or forget your admin credentials in the future, re-add `ADMIN_USERNAME` and `ADMIN_PASSWORD` in the Cloudflare Dashboard and sign in once at `/admin/login` to reset/upsert your bcrypt hash in D1—then delete the environment variables again once recovery is complete.
 
 ---
 
@@ -243,7 +244,7 @@ curl -sS -X POST "$ORIGIN/admin/api/v1/skill/presentations" \
       {
         "path": "index.html",
         "contentType": "text/html",
-        "data": "PGh0bWw+PC9odG1sPg=="
+        "data": "<BASE64_ENCODED_FILE_CONTENT>"
       }
     ]
   }'

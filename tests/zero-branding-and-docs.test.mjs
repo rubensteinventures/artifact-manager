@@ -6,7 +6,15 @@ import { fileURLToPath } from 'node:url';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-const IGNORED_DIRS = new Set(['node_modules', '.git', 'dist', '.astro', '.wrangler', '.superpowers']);
+const IGNORED_DIRS = new Set([
+	'node_modules',
+	'.git',
+	'dist',
+	'.astro',
+	'.wrangler',
+	'.superpowers',
+	'.gemini_security',
+]);
 
 function walkFiles(dir, out = []) {
 	for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -27,9 +35,9 @@ test('entire repository contains zero proprietary branding or legacy Cloudflare 
 		/rubenstein/i,
 		/hubspotusercontent/i,
 		/49211790/,
-		/911d2b94-2e1e-420b-aef0-ec16bdac5a15/,
-		/2ef80afa62094235a683a4eaf59ffa01/,
-		/674f4ecd29424e74ae471f8cfe7a1df2/,
+		/911d2b94-2e1e-420b/,
+		/2ef80afa62094235/,
+		/674f4ecd29424e74/,
 	];
 
 	const allFiles = walkFiles(rootDir).filter(
@@ -74,6 +82,8 @@ test('README.md documents new Cloudflare account setup, branding variables, and 
 	assert.match(readme, /LOGO_URL/);
 	assert.match(readme, /PUBLIC_CONTENT_BASE_URL/);
 	assert.match(readme, /\/admin\/api\/v1\/skill\/presentations/);
+	assert.match(readme, /<BASE64_ENCODED_FILE_CONTENT>/);
+	assert.doesNotMatch(readme, /PGh0bWw\+PC9odG1sPg==/);
 
 	const skillScript = fs.readFileSync(
 		path.join(rootDir, 'skills/presentations-manager/scripts/update_presentation.js'),

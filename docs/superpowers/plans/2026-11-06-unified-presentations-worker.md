@@ -95,8 +95,8 @@ test('wrangler.jsonc configures DB, BUCKET, SESSION, and branding vars with safe
 	assert.match(raw, /"APP_NAME"/);
 	assert.doesNotMatch(raw, /SESSION_SECRET/);
 	assert.doesNotMatch(raw, /single-page-application/);
-	assert.doesNotMatch(raw, /911d2b94-2e1e-420b-aef0-ec16bdac5a15/);
-	assert.doesNotMatch(raw, /2ef80afa62094235a683a4eaf59ffa01/);
+	assert.doesNotMatch(raw, /911d2b94-2e1e-420b/);
+	assert.doesNotMatch(raw, /2ef80afa62094235/);
 	assert.doesNotMatch(raw, /innovaitionpartners/i);
 });
 
@@ -891,9 +891,9 @@ test('entire repository contains zero proprietary branding or legacy Cloudflare 
 		/rubenstein/i,
 		/hubspotusercontent/i,
 		/49211790/,
-		/911d2b94-2e1e-420b-aef0-ec16bdac5a15/,
-		/2ef80afa62094235a683a4eaf59ffa01/,
-		/674f4ecd29424e74ae471f8cfe7a1df2/,
+		/911d2b94-2e1e-420b/,
+		/2ef80afa62094235/,
+		/674f4ecd29424e74/,
 	];
 
 	const allFiles = walkFiles(rootDir).filter(

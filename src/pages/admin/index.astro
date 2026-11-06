@@ -1,0 +1,405 @@
+---
+import { env } from 'cloudflare:workers';
+import { validatePresentationSlug } from '@/lib/slug-username';
+import { getBrandingConfig } from '@/lib/branding';
+import Layout from '@/layouts/AdminLayout.astro';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/starwind/card/index.ts';
+import { Button } from '@/components/starwind/button/index.ts';
+import { Input } from '@/components/starwind/input/index.ts';
+import { Alert } from '@/components/starwind/alert/index.ts';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/starwind/table/index.ts';
+import { Plus, Settings, ExternalLink } from 'lucide-astro';
+
+const db = env.DB;
+const branding = getBrandingConfig(
+	env as unknown as Record<string, unknown>,
+	Astro.url
+);
+
+let createError = '';
+
+if (Astro.request.method === 'POST') {
+	const formData = await Astro.request.formData();
+	const action = formData.get('action');
+
+	if (action === 'create') {
+		const nameRaw = formData.get('name');
+		const slugRaw = formData.get('slug');
+		const name = typeof nameRaw === 'string' ? nameRaw.trim() : '';
+		const slugCheck = validatePresentationSlug(typeof slugRaw === 'string' ? slugRaw : '');
+		if (!name) {
+			createError = 'Display name is required.';
+		} else if (!slugCheck.ok) {
+			createError = slugCheck.error;
+		} else {
+			try {
+				const now = new Date().toISOString();
+				await db.prepare('INSERT INTO presentations (slug, name, uploaded_at) VALUES (?, ?, ?)')
+					.bind(slugCheck.slug, name, now)
+					.run();
+				return Astro.redirect(`/admin/presentations/${slugCheck.slug}`);
+			} catch (e: any) {
+				console.error(e);
+				createError = 'Could not create presentation. The slug may already exist.';
+			}
+		}
+	}
+}
+
+const presentations = await db.prepare("SELECT * FROM presentations ORDER BY COALESCE(uploaded_at, '') DESC, name ASC").all();
+
+function formatDate(isoString: string | null | undefined): string {
+	if (!isoString) return '—';
+	try {
+		const d = new Date(isoString);
+		if (isNaN(d.getTime())) return '—';
+		return d.toLocaleDateString('en-US', {
+			month: 'short',
+			day: 'numeric',
+			year: 'numeric'
+		});
+	} catch {
+		return '—';
+	}
+}
+---
+
+<Layout title="Dashboard">
+	<div class="flex flex-col gap-8">
+		<div class="flex justify-between items-center">
+			<div>
+				<h1 class="text-3xl font-bold text-slate-900">Presentations</h1>
+				<p class="text-slate-500">Manage your HTML-based presentations</p>
+			</div>
+		</div>
+
+		<Card>
+			<CardHeader>
+				<CardTitle>Create New Presentation</CardTitle>
+				<CardDescription>Enter details for the new presentation</CardDescription>
+			</CardHeader>
+			<CardContent>
+				<form method="POST" class="space-y-4">
+					<input type="hidden" name="action" value="create" />
+					<div class="grid gap-4 md:grid-cols-[1fr_1fr_auto]">
+						<div class="space-y-2 min-w-0">
+							<label for="name" class="text-sm font-medium">Display Name</label>
+							<Input
+								id="name"
+								name="name"
+								placeholder="e.g., Q1 Marketing Plan"
+								required
+								data-1p-ignore="true"
+							/>
+						</div>
+						<div class="group space-y-2 min-w-0">
+							<p class="hidden text-xs text-slate-600 group-focus-within:block">
+								Slugs must use <strong class="text-slate-800">lowercase letters, numbers, and hyphens</strong> only (e.g.{' '}
+								<code class="font-mono">q1-marketing</code>).
+							</p>
+							<label for="slug" class="text-sm font-medium">URL slug</label>
+							<Input
+								id="slug"
+								name="slug"
+								placeholder="e.g., q1-marketing"
+								pattern="[a-z0-9]+(-[a-z0-9]+)*"
+								title="Lowercase letters, numbers, and hyphens only"
+								required
+							/>
+						</div>
+						<div class="w-full md:w-auto md:self-end">
+							<Button type="submit" class="w-full md:w-auto">
+								<Plus class="w-4 h-4 mr-2" /> Create Presentation
+							</Button>
+						</div>
+					</div>
+					{createError && (
+						<Alert variant="destructive" class="text-sm">
+							{createError}
+						</Alert>
+					)}
+				</form>
+			</CardContent>
+		</Card>
+
+		<Card>
+			<CardContent class="pt-6 pb-0">
+				<div class="mb-4">
+					<label for="search-input" class="sr-only">Search presentations</label>
+					<Input
+						id="search-input"
+						placeholder="Search by name, slug, or protection status..."
+						class="w-full"
+						autocomplete="off"
+					/>
+				</div>
+				<Table>
+				<TableHeader>
+					<TableRow>
+						<TableHead class="pl-0 select-none cursor-pointer group max-w-[180px] sm:max-w-[220px] md:max-w-[260px]" id="th-name">
+							<span class="flex items-center gap-1">
+								Name <span class="sort-icon text-slate-400 group-hover:text-slate-600 font-mono text-xs">↕</span>
+							</span>
+						</TableHead>
+						<TableHead class="select-none cursor-pointer group max-w-[140px] sm:max-w-[180px] md:max-w-[220px]" id="th-slug">
+							<span class="flex items-center gap-1">
+								Slug <span class="sort-icon text-slate-400 group-hover:text-slate-600 font-mono text-xs">↕</span>
+							</span>
+						</TableHead>
+						<TableHead class="select-none cursor-pointer group" id="th-uploaded">
+							<span class="flex items-center gap-1">
+								Uploaded <span class="sort-icon text-slate-700 font-mono text-xs">▼</span>
+							</span>
+						</TableHead>
+						<TableHead class="select-none cursor-pointer group" id="th-protection">
+							<span class="flex items-center gap-1">
+								Protection <span class="sort-icon text-slate-400 group-hover:text-slate-600 font-mono text-xs">↕</span>
+							</span>
+						</TableHead>
+						<TableHead class="text-right pr-0">Actions</TableHead>
+					</TableRow>
+				</TableHeader>
+				<TableBody>
+					{presentations.results.map((p: any) => (
+						<TableRow key={p.slug} class="presentation-row" data-presentation-row="true" data-name={p.name.toLowerCase()} data-slug={p.slug.toLowerCase()} data-uploaded={p.uploaded_at || ''} data-protection={(p.username && p.password ? 'protected' : p.username ? 'needs password' : 'public')}>
+							<TableCell class="font-medium pl-0 max-w-[180px] sm:max-w-[220px] md:max-w-[260px]">
+								<span class="block truncate cursor-default" title={p.name}>{p.name}</span>
+							</TableCell>
+							<TableCell class="max-w-[140px] sm:max-w-[180px] md:max-w-[220px]">
+								<span class="block truncate cursor-default font-mono text-xs text-slate-600" title={p.slug}>{p.slug}</span>
+							</TableCell>
+							<TableCell class="text-slate-500 text-sm whitespace-nowrap">
+								<time class="upload-date" datetime={p.uploaded_at} title={p.uploaded_at}>{formatDate(p.uploaded_at)}</time>
+							</TableCell>
+							<TableCell>
+								{p.username && p.password ? (
+									<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+										Protected
+									</span>
+								) : p.username ? (
+									<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-900 border border-yellow-200">
+										Needs password
+									</span>
+								) : (
+									<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+										Public
+									</span>
+								)}
+							</TableCell>
+							<TableCell class="text-right flex justify-end gap-2 pr-0">
+								<a href={`/admin/presentations/${p.slug}`}>
+									<Button variant="outline" size="sm">
+										<Settings class="w-4 h-4 mr-2" /> Manage
+									</Button>
+								</a>
+								<a
+									href={`${branding.publicContentBaseUrl}/content/${p.slug}/`}
+									target="_blank"
+									rel="noopener noreferrer"
+								>
+									<Button variant="ghost" size="sm">
+										<ExternalLink class="w-4 h-4 mr-2" /> View
+									</Button>
+								</a>
+							</TableCell>
+						</TableRow>
+					))}
+					{presentations.results.length === 0 && (
+						<TableRow>
+							<TableCell colspan={5} class="text-center py-8 text-slate-500">
+								No presentations found. Create your first one above!
+							</TableCell>
+						</TableRow>
+					)}
+					<TableRow id="no-search-results" style="display: none;">
+						<TableCell colspan={5} class="text-center py-8 text-slate-500 italic">
+							No presentations match your search.
+						</TableCell>
+					</TableRow>
+				</TableBody>
+			</Table>
+			</CardContent>
+		</Card>
+	</div>
+
+	<script>
+		function initDashboard() {
+			const searchInput = document.getElementById('search-input') as HTMLInputElement | null;
+			if (!searchInput || searchInput.dataset.dashboardInitialized === 'true') {
+				return;
+			}
+			searchInput.dataset.dashboardInitialized = 'true';
+
+			function enhanceDates() {
+				const now = new Date();
+				const dateElements = document.querySelectorAll('.upload-date');
+
+				dateElements.forEach(el => {
+					const datetimeStr = el.getAttribute('datetime');
+					if (!datetimeStr) return;
+
+					const d = new Date(datetimeStr);
+					if (isNaN(d.getTime())) return;
+
+					const diffMs = now.getTime() - d.getTime();
+					const diffMins = Math.floor(diffMs / 60000);
+
+					let friendlyStr = '';
+					const timeStr = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+
+					if (diffMs > -60000 && diffMs < 60000) {
+						friendlyStr = 'Just now';
+					} else if (diffMs >= 60000 && diffMs < 3600000) {
+						friendlyStr = `${diffMins}m ago`;
+					} else {
+						const isToday = d.getFullYear() === now.getFullYear() &&
+							d.getMonth() === now.getMonth() &&
+							d.getDate() === now.getDate();
+
+						const yesterday = new Date(now);
+						yesterday.setDate(now.getDate() - 1);
+						const isYesterday = d.getFullYear() === yesterday.getFullYear() &&
+							d.getMonth() === yesterday.getMonth() &&
+							d.getDate() === yesterday.getDate();
+
+						if (isToday) {
+							friendlyStr = `Today at ${timeStr}`;
+						} else if (isYesterday) {
+							friendlyStr = `Yesterday at ${timeStr}`;
+						} else if (d.getFullYear() === now.getFullYear()) {
+							const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+							friendlyStr = `${dateStr} at ${timeStr}`;
+						} else {
+							const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+							friendlyStr = `${dateStr} at ${timeStr}`;
+						}
+					}
+
+					el.textContent = friendlyStr;
+					el.setAttribute('title', `${d.toLocaleString()} (${d.toISOString()})`);
+				});
+			}
+
+			enhanceDates();
+
+			const tbody = document.querySelector('tbody') as HTMLTableSectionElement | null;
+			const noResultsRow = document.getElementById('no-search-results') as HTMLTableRowElement | null;
+
+			// Cache rows
+			const getRows = () => Array.from(document.querySelectorAll('[data-presentation-row="true"]')) as HTMLTableRowElement[];
+
+			// Live Search Filtering
+			if (searchInput) {
+				searchInput.addEventListener('input', () => {
+					const query = searchInput.value.trim().toLowerCase();
+					let visibleCount = 0;
+					const rows = getRows();
+
+					rows.forEach(row => {
+						const name = row.getAttribute('data-name') || '';
+						const slug = row.getAttribute('data-slug') || '';
+						const protection = row.getAttribute('data-protection') || '';
+
+						const match = name.includes(query) || slug.includes(query) || protection.includes(query);
+						if (match) {
+							row.style.display = '';
+							visibleCount++;
+						} else {
+							row.style.display = 'none';
+						}
+					});
+
+					if (noResultsRow) {
+						if (visibleCount === 0 && query.length > 0 && rows.length > 0) {
+							noResultsRow.style.display = '';
+						} else {
+							noResultsRow.style.display = 'none';
+						}
+					}
+				});
+			}
+
+			// Interactive Header Sorting
+			let currentSortCol = 'uploaded';
+			let currentSortDir = 'desc'; // 'asc' or 'desc'
+
+			const headers = [
+				{ id: 'th-name', attr: 'data-name', type: 'string' },
+				{ id: 'th-slug', attr: 'data-slug', type: 'string' },
+				{ id: 'th-uploaded', attr: 'data-uploaded', type: 'date' },
+				{ id: 'th-protection', attr: 'data-protection', type: 'string' }
+			];
+
+			function updateSortIcons() {
+				headers.forEach(h => {
+					const el = document.getElementById(h.id);
+					if (!el) return;
+					const iconEl = el.querySelector('.sort-icon');
+					if (!iconEl) return;
+
+					const colName = h.id.replace('th-', '');
+					if (colName === currentSortCol) {
+						iconEl.textContent = currentSortDir === 'asc' ? '▲' : '▼';
+						iconEl.className = 'sort-icon text-slate-700 font-mono text-xs';
+					} else {
+						iconEl.textContent = '↕';
+						iconEl.className = 'sort-icon text-slate-400 group-hover:text-slate-600 font-mono text-xs';
+					}
+				});
+			}
+
+			headers.forEach(h => {
+				const el = document.getElementById(h.id);
+				if (!el) return;
+
+				el.addEventListener('click', () => {
+					const colName = h.id.replace('th-', '');
+					if (currentSortCol === colName) {
+						currentSortDir = currentSortDir === 'asc' ? 'desc' : 'asc';
+					} else {
+						currentSortCol = colName;
+						currentSortDir = colName === 'uploaded' ? 'desc' : 'asc'; // default to desc for dates, asc for text
+					}
+
+					sortRows(h.attr, h.type);
+					updateSortIcons();
+				});
+			});
+
+			function sortRows(attrName: string, type: string) {
+				if (!tbody) return;
+				const rows = getRows();
+
+				rows.sort((a, b) => {
+					let valA = a.getAttribute(attrName) || '';
+					let valB = b.getAttribute(attrName) || '';
+
+					if (type === 'date') {
+						if (!valA && !valB) return 0;
+						if (!valA) return 1;
+						if (!valB) return -1;
+						const timeA = new Date(valA).getTime();
+						const timeB = new Date(valB).getTime();
+						return currentSortDir === 'asc' ? timeA - timeB : timeB - timeA;
+					} else {
+						return currentSortDir === 'asc' 
+							? valA.localeCompare(valB) 
+							: valB.localeCompare(valA);
+					}
+				});
+
+				rows.forEach(row => {
+					tbody.appendChild(row);
+				});
+				if (noResultsRow) tbody.appendChild(noResultsRow);
+			}
+		}
+
+		if (document.readyState === 'loading') {
+			document.addEventListener('DOMContentLoaded', initDashboard);
+		} else {
+			initDashboard();
+		}
+		document.addEventListener('astro:page-load', initDashboard);
+	</script>
+</Layout>

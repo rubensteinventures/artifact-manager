@@ -1,0 +1,988 @@
+---
+import { env } from 'cloudflare:workers';
+import {
+	hashPresentationPassword,
+	isPbkdf2PresentationHash,
+	getVisitorPasswordValidationError,
+	VISITOR_PASSWORD_MIN_LENGTH,
+	VISITOR_PASSWORD_REQUIREMENTS_SUMMARY,
+} from '@/lib/presentation-password';
+import { deleteAllUnderContentPrefix } from '@/lib/presentation-r2';
+import { normalizeContentRelativePath, isValidPresentationObjectKey } from '@/lib/r2-path';
+import { validatePublicUsername, isAllowedSlugParam } from '@/lib/slug-username';
+import { getBrandingConfig } from '@/lib/branding';
+import Layout from '@/layouts/AdminLayout.astro';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/starwind/card/index.ts';
+import { Button } from '@/components/starwind/button/index.ts';
+import { Input } from '@/components/starwind/input/index.ts';
+import { Alert } from '@/components/starwind/alert/index.ts';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/starwind/table/index.ts';
+import {
+	ArrowLeft,
+	Upload,
+	Trash2,
+	Shield,
+	Globe,
+	File,
+	Folder,
+	KeyRound,
+	ExternalLink,
+	Pencil,
+	Sparkles,
+	Eye,
+	EyeOff,
+	Copy,
+} from 'lucide-astro';
+
+const { slug } = Astro.params;
+const db = env.DB;
+const bucket = env.BUCKET;
+const branding = getBrandingConfig(
+	env as unknown as Record<string, unknown>,
+	Astro.url
+);
+
+let passwordFormError = '';
+let nameFormError = '';
+let folderFormError = '';
+let usernameFormError = '';
+let renameFormError = '';
+let deleteFormError = '';
+
+if (!isAllowedSlugParam(slug)) {
+	return Astro.redirect('/admin');
+}
+
+const presentation = await db.prepare('SELECT * FROM presentations WHERE slug = ?').bind(slug).first();
+
+if (!presentation) {
+	return Astro.redirect('/admin');
+}
+
+const pres = presentation as Record<string, unknown>;
+const usernameStr = typeof pres.username === 'string' ? pres.username.trim() : '';
+const passwordStr = typeof pres.password === 'string' ? pres.password : '';
+const hasVisitorPassword = passwordStr.length > 0;
+const visitorPasswordUsesPbkdf2 = hasVisitorPassword && isPbkdf2PresentationHash(passwordStr);
+
+const displayName =
+	typeof pres.name === 'string' ? pres.name : String(pres.name ?? '');
+const presentationSlug = typeof slug === 'string' ? slug : '';
+const publicPresentationViewUrl = `${branding.publicContentBaseUrl}/content/${presentationSlug}/`;
+
+function publicFileUrl(slugForUrl: string, relativePath: string): string {
+	const encodedPath = relativePath
+		.split('/')
+		.filter((seg) => seg.length > 0)
+		.map((seg) => encodeURIComponent(seg))
+		.join('/');
+	return `${branding.publicContentBaseUrl}/content/${encodeURIComponent(slugForUrl)}/${encodedPath}`;
+}
+
+function formatFileSize(bytes: number): string {
+	if (bytes === 0) return '0 B';
+
+	const isNegative = bytes < 0;
+	const absBytes = Math.abs(bytes);
+
+	const k = 1024;
+	const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+
+	if (absBytes < k) {
+		return `${isNegative ? '-' : ''}${absBytes} B`;
+	}
+
+	const i = Math.min(
+		Math.floor(Math.log(absBytes) / Math.log(k)),
+		sizes.length - 1
+	);
+	const num = absBytes / Math.pow(k, i);
+	return `${isNegative ? '-' : ''}${num.toFixed(1)} ${sizes[i]}`;
+}
+
+// Handle protection settings update
+if (Astro.request.method === 'POST') {
+	const formData = await Astro.request.formData();
+	const action = formData.get('action');
+
+	if (action === 'update-presentation-name') {
+		const nameRaw = formData.get('name');
+		const name = typeof nameRaw === 'string' ? nameRaw.trim() : '';
+		if (!name) {
+			nameFormError = 'Display name cannot be empty.';
+		} else {
+			await db.prepare('UPDATE presentations SET name = ? WHERE slug = ?').bind(name, slug).run();
+			return Astro.redirect(`/admin/presentations/${slug}`);
+		}
+	}
+
+	if (action === 'create-folder') {
+		const folderRaw = formData.get('folder_path');
+		const folder =
+			typeof folderRaw === 'string' ? normalizeContentRelativePath(folderRaw) : null;
+		if (!folder) {
+			folderFormError =
+				'Use a path like assets or images/icons. No empty segments, .., or absolute paths.';
+		} else {
+			const markerKey = `content/${slug}/${folder}/`;
+			await bucket.put(markerKey, new Uint8Array(0));
+			const now = new Date().toISOString();
+			await db.prepare('UPDATE presentations SET uploaded_at = ? WHERE slug = ?').bind(now, slug).run();
+			return Astro.redirect(`/admin/presentations/${slug}`);
+		}
+	}
+
+	if (action === 'update-protection') {
+		const usernameRaw = formData.get('username');
+		const uCheck = validatePublicUsername(typeof usernameRaw === 'string' ? usernameRaw : '');
+		if (!uCheck.ok) {
+			usernameFormError = uCheck.error;
+		} else if (uCheck.username === null) {
+			await db.prepare('UPDATE presentations SET username = NULL, password = NULL WHERE slug = ?').bind(slug).run();
+			return Astro.redirect(`/admin/presentations/${slug}`);
+		} else {
+			await db.prepare('UPDATE presentations SET username = ? WHERE slug = ?').bind(uCheck.username, slug).run();
+			return Astro.redirect(`/admin/presentations/${slug}`);
+		}
+	}
+
+	if (action === 'update-presentation-password') {
+		if (!usernameStr) {
+			passwordFormError = 'Set a public username before choosing a visitor password.';
+		} else {
+			const newPwd = formData.get('new_password');
+			const confirm = formData.get('confirm_password');
+			const p1 = typeof newPwd === 'string' ? newPwd : '';
+			const p2 = typeof confirm === 'string' ? confirm : '';
+			const strengthError = getVisitorPasswordValidationError(p1);
+			if (strengthError) {
+				passwordFormError = strengthError;
+			} else if (p1 !== p2) {
+				passwordFormError = 'New password and confirmation do not match.';
+			} else {
+				const hash = await hashPresentationPassword(p1);
+				await db.prepare('UPDATE presentations SET password = ? WHERE slug = ?').bind(hash, slug).run();
+				return Astro.redirect(`/admin/presentations/${slug}`);
+			}
+		}
+	}
+
+	if (action === 'rename-file') {
+		const fromKeyRaw = formData.get('from_key');
+		const newPathRaw = formData.get('new_relative_path');
+		const fromKey = typeof fromKeyRaw === 'string' ? fromKeyRaw : '';
+		const newPath =
+			typeof newPathRaw === 'string' ? normalizeContentRelativePath(newPathRaw) : null;
+		const slugStr = typeof slug === 'string' ? slug : '';
+		const expectedPrefix = `content/${slugStr}/`;
+		if (!slugStr) {
+			renameFormError = 'Invalid presentation.';
+		} else if (!fromKey.startsWith(expectedPrefix)) {
+			renameFormError = 'Invalid source path.';
+		} else if (fromKey.endsWith('/')) {
+			renameFormError = 'Folders cannot be renamed from this table.';
+		} else if (newPath === null || newPath.length === 0) {
+			renameFormError =
+				'Enter a valid destination path (e.g. slides/deck.html). No .. or empty segments.';
+		} else {
+			const fromSuffix = fromKey.slice(expectedPrefix.length);
+			const fromNorm = normalizeContentRelativePath(fromSuffix);
+			if (fromNorm === null || fromNorm !== fromSuffix) {
+				renameFormError = 'Invalid source path.';
+			} else {
+				const newKey = `${expectedPrefix}${newPath}`;
+				if (newKey === fromKey) {
+					return Astro.redirect(`/admin/presentations/${slug}`);
+				}
+				const head = await bucket.head(fromKey);
+				if (!head) {
+					renameFormError = 'That file was not found. Reload the page if it was removed.';
+				} else {
+					const obj = await bucket.get(fromKey);
+					if (!obj) {
+						renameFormError = 'Could not read the file to rename.';
+					} else if (obj.body == null && obj.size !== 0) {
+						renameFormError = 'Could not read the file to rename.';
+					} else {
+						const body = obj.body ?? new Uint8Array(0);
+						await bucket.put(newKey, body, {
+							httpMetadata: obj.httpMetadata,
+							customMetadata: obj.customMetadata,
+						});
+						await bucket.delete(fromKey);
+						const now = new Date().toISOString();
+						await db.prepare('UPDATE presentations SET uploaded_at = ? WHERE slug = ?').bind(now, slug).run();
+						return Astro.redirect(`/admin/presentations/${slug}`);
+					}
+				}
+			}
+		}
+	}
+
+    if (action === 'delete-file') {
+        const keyRaw = formData.get('key');
+        const key = typeof keyRaw === 'string' ? keyRaw : '';
+        if (!isValidPresentationObjectKey(presentationSlug, key)) {
+            deleteFormError = 'Invalid file key.';
+        } else {
+            await bucket.delete(key);
+            const now = new Date().toISOString();
+            await db.prepare('UPDATE presentations SET uploaded_at = ? WHERE slug = ?').bind(now, slug).run();
+            return Astro.redirect(`/admin/presentations/${slug}`);
+        }
+    }
+
+    if (action === 'delete-presentation') {
+        await db.prepare('DELETE FROM presentations WHERE slug = ?').bind(slug).run();
+        if (typeof slug === 'string' && slug.length > 0) {
+            await deleteAllUnderContentPrefix(bucket, slug);
+        }
+        return Astro.redirect('/admin');
+    }
+}
+
+// List files from R2
+const objects = await bucket.list({ prefix: `content/${slug}/` });
+const files = objects.objects
+	.map((obj) => {
+		const name = obj.key.replace(`content/${slug}/`, '');
+		const isFolder = name.endsWith('/');
+		return {
+			key: obj.key,
+			name,
+			size: obj.size,
+			lastModified: obj.uploaded,
+			isFolder,
+		};
+	})
+	// R2 key exactly `content/{slug}/` yields an empty label — hide from the listing
+	.filter((f) => f.name.length > 0);
+---
+
+<Layout title={`Manage ${displayName}`}>
+	<div class="flex flex-col gap-6">
+		<div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between lg:gap-6">
+			<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4 min-w-0">
+				<a href="/admin" class="shrink-0">
+					<Button variant="ghost" size="sm">
+						<ArrowLeft class="w-4 h-4 mr-2" /> Back
+					</Button>
+				</a>
+				<div class="min-w-0">
+					<h1 class="text-3xl font-bold text-slate-900">{displayName}</h1>
+					<p class="text-sm text-slate-500 mt-1">Edit the display name, files, and protection below.</p>
+				</div>
+			</div>
+			<a
+				href={publicPresentationViewUrl}
+				target="_blank"
+				rel="noopener noreferrer"
+				class="shrink-0 self-start"
+			>
+				<Button variant="outline" size="sm">
+					<ExternalLink class="w-4 h-4 mr-2" /> View
+				</Button>
+			</a>
+		</div>
+
+		<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+			<!-- Protection Settings -->
+			<div class="md:col-span-1 space-y-6">
+				<Card>
+					<CardHeader>
+						<CardTitle className="inline-flex w-full min-w-0 flex-row flex-nowrap items-center gap-2 text-lg">
+							<Shield class="w-5 h-5 shrink-0" aria-hidden="true" />
+							<span class="min-w-0 leading-snug">Protection Settings</span>
+						</CardTitle>
+						<CardDescription>Configure access for this presentation</CardDescription>
+					</CardHeader>
+					<CardContent className="space-y-6">
+						<form method="POST" class="space-y-4 pb-6">
+							<input type="hidden" name="action" value="update-protection" />
+							<div class="group space-y-2">
+								<p class="hidden text-xs text-slate-500 group-focus-within:block">
+									Only <strong class="text-slate-700">lowercase letters, numbers, and hyphens</strong>. Clear the field
+									to make the presentation fully public (visitor password is removed).
+								</p>
+								<label for="username" class="text-sm font-medium">Public username</label>
+								<Input
+									id="username"
+									name="username"
+									value={usernameStr}
+									placeholder="Leave empty for public access"
+									pattern="[a-z0-9]+(-[a-z0-9]+)*"
+									title="Lowercase letters, numbers, and hyphens only"
+								/>
+							</div>
+							{usernameFormError && (
+								<Alert variant="destructive" className="text-sm">
+									{usernameFormError}
+								</Alert>
+							)}
+							{!usernameStr && (
+								<Alert variant="info" className="text-xs bg-green-50 border-green-200 text-green-800">
+									<Globe class="w-3 h-3 mr-2" /> This presentation is currently <strong>public</strong>.
+								</Alert>
+							)}
+							<Button type="submit" className="w-full">Save username</Button>
+						</form>
+
+						<div class="border-t border-slate-200 pt-6 space-y-3">
+							<h3 class="text-sm font-medium text-slate-900 flex items-center gap-2">
+								<KeyRound class="w-4 h-4" /> Visitor password
+							</h3>
+							<p class="text-xs text-slate-600">
+								{hasVisitorPassword
+									? visitorPasswordUsesPbkdf2
+										? 'A password is set for visitors. It is not shown here.'
+										: 'A password value is stored (legacy format). Reset below to store a PBKDF2 hash.'
+									: 'No visitor password is set yet.'}
+							</p>
+							{!usernameStr ? (
+								<p class="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+									Set a public username above before you can set a visitor password.
+								</p>
+							) : (
+								<form method="POST" class="space-y-3">
+									<input type="hidden" name="action" value="update-presentation-password" />
+									<div class="group space-y-3">
+										<p class="hidden text-xs text-slate-600 leading-relaxed group-focus-within:block">
+											<strong class="text-slate-800">Requirements:</strong> {VISITOR_PASSWORD_REQUIREMENTS_SUMMARY}{' '}
+											You can use <strong class="text-slate-800">Generate passphrase</strong> for three hyphen-separated
+											lowercase words, or a strong password from your password manager.
+										</p>
+										<div class="space-y-2">
+											<label for="new_password" class="text-sm font-medium">
+												{hasVisitorPassword ? 'New visitor password' : 'Visitor password'}
+											</label>
+											<div class="relative">
+												<Input
+													id="new_password"
+													name="new_password"
+													type="password"
+													autocomplete="new-password"
+													minlength={VISITOR_PASSWORD_MIN_LENGTH}
+													placeholder={`At least ${VISITOR_PASSWORD_MIN_LENGTH} characters`}
+													required
+													className="pr-10"
+												/>
+												<button
+													type="button"
+													class="visitor-pw-toggle absolute top-1/2 right-1.5 z-10 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-800 focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:outline-none"
+													aria-pressed="false"
+													aria-controls="new_password"
+													aria-label="Show password"
+													data-visitor-pw-toggle
+												>
+													<Eye class="visitor-pw-icon-eye pointer-events-none absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2" aria-hidden="true" />
+													<EyeOff class="visitor-pw-icon-eyeoff pointer-events-none absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 hidden" aria-hidden="true" />
+												</button>
+											</div>
+										</div>
+										<div class="space-y-2">
+											<label for="confirm_password" class="text-sm font-medium">Confirm password</label>
+											<div class="relative">
+												<Input
+													id="confirm_password"
+													name="confirm_password"
+													type="password"
+													autocomplete="new-password"
+													minlength={VISITOR_PASSWORD_MIN_LENGTH}
+													placeholder="Repeat password"
+													required
+													className="pr-10"
+												/>
+												<button
+													type="button"
+													class="visitor-pw-toggle absolute top-1/2 right-1.5 z-10 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-800 focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:outline-none"
+													aria-pressed="false"
+													aria-controls="confirm_password"
+													aria-label="Show password"
+													data-visitor-pw-toggle
+												>
+													<Eye class="visitor-pw-icon-eye pointer-events-none absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2" aria-hidden="true" />
+													<EyeOff class="visitor-pw-icon-eyeoff pointer-events-none absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 hidden" aria-hidden="true" />
+												</button>
+											</div>
+										</div>
+										<Button type="button" variant="outline" size="sm" id="generateVisitorPassphrase" className="w-full">
+											<Sparkles class="w-4 h-4 mr-2" /> Generate passphrase
+										</Button>
+									</div>
+									{passwordFormError && (
+										<Alert variant="destructive" className="text-sm">
+											{passwordFormError}
+										</Alert>
+									)}
+									<Button type="submit" variant={hasVisitorPassword ? 'outline' : 'default'} className="w-full">
+										Save password
+									</Button>
+								</form>
+							)}
+						</div>
+					</CardContent>
+				</Card>
+
+				<Card>
+					<CardHeader>
+						<CardTitle className="text-lg">Presentation details</CardTitle>
+						<CardDescription>
+							Change how this presentation appears in the dashboard. The slug may not be modified.
+						</CardDescription>
+					</CardHeader>
+					<CardContent className="space-y-6">
+						<form method="POST" class="space-y-4">
+							<input type="hidden" name="action" value="update-presentation-name" />
+							<div class="space-y-2">
+								<label for="pres_name" class="text-sm font-medium">Display name</label>
+								<Input id="pres_name" name="name" value={displayName} data-1p-ignore="true" />
+							</div>
+							{nameFormError && (
+								<Alert variant="destructive" className="text-sm">
+									{nameFormError}
+								</Alert>
+							)}
+							<Button type="submit" className="w-full">Save display name</Button>
+						</form>
+						<div class="space-y-2 border-t border-slate-100 pt-6">
+							<label for="pres_slug" class="text-sm font-medium">Slug</label>
+							<Input
+								id="pres_slug"
+								value={presentationSlug}
+								readOnly
+								disabled
+								className="bg-slate-50 text-slate-600"
+								aria-readonly="true"
+							/>
+							<p class="text-xs text-slate-500">
+								Used in URLs and as the file storage prefix{' '}
+								<code class="font-mono">content/{presentationSlug}/</code>.
+							</p>
+						</div>
+					</CardContent>
+				</Card>
+
+                <Card className="border-red-100">
+                    <CardHeader>
+                        <CardTitle className="text-red-600 text-lg">Danger Zone</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                        <form method="POST" onsubmit="return confirm('Are you sure? This will delete all data and files stored for this presentation.')">
+                            <input type="hidden" name="action" value="delete-presentation" />
+                            <Button variant="destructive" type="submit" className="w-full">
+                                <Trash2 class="w-4 h-4 mr-2" /> Delete Presentation
+                            </Button>
+                        </form>
+                    </CardContent>
+                </Card>
+			</div>
+
+			<!-- File Management -->
+			<div class="md:col-span-2 space-y-6">
+				<Card>
+					<CardHeader>
+						<CardTitle className="text-lg">Presentation Files</CardTitle>
+						<CardDescription>
+							Objects under <code class="font-mono">content/{slug}/</code>. Create folders, then upload into them using{' '}
+							<em>Upload into folder</em> below (or use <em>Browse folder</em> to keep nested paths).
+						</CardDescription>
+					</CardHeader>
+					<CardContent className="space-y-4">
+						<form method="POST" class="flex flex-col gap-3 sm:flex-row sm:items-end">
+							<input type="hidden" name="action" value="create-folder" />
+							<div class="flex-1 space-y-2 w-full">
+								<label for="folder_path" class="text-sm font-medium">New folder</label>
+								<Input
+									id="folder_path"
+									name="folder_path"
+									placeholder="e.g. assets or images/icons"
+									autocomplete="off"
+								/>
+							</div>
+							<Button type="submit" variant="outline" className="w-full sm:w-auto shrink-0">
+								<Folder class="w-4 h-4 mr-2" /> Create folder
+							</Button>
+						</form>
+						{folderFormError && (
+							<Alert variant="destructive" className="text-sm">
+								{folderFormError}
+							</Alert>
+						)}
+						{renameFormError && (
+							<Alert variant="destructive" className="text-sm">
+								{renameFormError}
+							</Alert>
+						)}
+						{deleteFormError && (
+							<Alert variant="destructive" className="text-sm">
+								{deleteFormError}
+							</Alert>
+						)}
+					</CardContent>
+					<div class="px-6 pb-6">
+						<Table>
+						<TableHeader>
+							<TableRow>
+								<TableHead className="pl-0">Name</TableHead>
+								<TableHead>Size</TableHead>
+								<TableHead className="text-right pr-0">Actions</TableHead>
+							</TableRow>
+						</TableHeader>
+						<TableBody>
+							{files.map((file, fileRowIdx) => (
+								<TableRow key={file.key}>
+									<TableCell className="font-mono text-xs pl-0">
+										<span class="inline-flex items-center gap-2">
+											{file.isFolder ? (
+												<Folder class="w-3 h-3 text-amber-600 shrink-0" />
+											) : (
+												<File class="w-3 h-3 text-slate-400 shrink-0" />
+											)}
+											{file.name}
+										</span>
+									</TableCell>
+									<TableCell className="text-xs text-slate-500">
+										{file.isFolder ? '—' : formatFileSize(file.size)}
+									</TableCell>
+									<TableCell className="text-right pr-0">
+										<div class="flex flex-col items-end gap-2">
+											{!file.isFolder ? (
+												<div
+													id={`rename-editor-${fileRowIdx}`}
+													class="rename-editor hidden w-full min-w-0 max-w-full sm:max-w-md"
+												>
+													<form
+														method="POST"
+														class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end min-w-0"
+													>
+														<input type="hidden" name="action" value="rename-file" />
+														<input type="hidden" name="from_key" value={file.key} />
+														<Input
+															name="new_relative_path"
+															value={file.name}
+															size="sm"
+															className="font-mono text-xs h-8 min-w-0 flex-1"
+															autocomplete="off"
+															aria-label={`New path for ${file.name}`}
+														/>
+														<Button type="submit" variant="outline" size="sm" className="h-8 shrink-0">
+															Rename
+														</Button>
+													</form>
+												</div>
+											) : null}
+											<div class="inline-flex items-center justify-end gap-0.5">
+												{!file.isFolder ? (
+													<button
+														type="button"
+														class="copy-public-file-url-btn inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:outline-none"
+														data-copy-public-url={publicFileUrl(presentationSlug, file.name)}
+														title="Copy public URL"
+														aria-label={`Copy public URL for ${file.name}`}
+													>
+														<Copy class="h-4 w-4" />
+													</button>
+												) : null}
+												{!file.isFolder ? (
+													<button
+														type="button"
+														class="rename-toggle-btn inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:outline-none"
+														data-rename-target={`rename-editor-${fileRowIdx}`}
+														aria-expanded="false"
+														aria-label={`Rename ${file.name}`}
+													>
+														<Pencil class="h-4 w-4" />
+													</button>
+												) : null}
+												<form method="POST" class="inline-flex justify-end">
+													<input type="hidden" name="action" value="delete-file" />
+													<input type="hidden" name="key" value={file.key} />
+													<Button
+														variant="ghost"
+														size="icon"
+														type="submit"
+														className="text-red-500 hover:text-red-700 h-8 w-8"
+														aria-label={file.isFolder ? `Delete folder ${file.name}` : `Delete ${file.name}`}
+													>
+														<Trash2 class="w-4 h-4" />
+													</Button>
+												</form>
+											</div>
+										</div>
+									</TableCell>
+								</TableRow>
+							))}
+							{files.length === 0 && (
+								<TableRow>
+									<TableCell colspan={3} className="text-center py-8 text-slate-400 italic">
+										No files yet.
+									</TableCell>
+								</TableRow>
+							)}
+						</TableBody>
+					</Table>
+					</div>
+				</Card>
+
+				<Card>
+					<CardHeader>
+						<CardTitle className="inline-flex w-full min-w-0 flex-row flex-nowrap items-center gap-2 text-lg">
+							<Upload class="w-5 h-5 shrink-0" aria-hidden="true" />
+							<span class="min-w-0 leading-snug">File Upload</span>
+						</CardTitle>
+						<CardDescription>
+							Upload HTML, assets, or ZIP archives (extracted automatically). Optional <strong>Upload into folder</strong>{' '}
+							prefixes every object key; <strong>Browse folder</strong> keeps each file’s path under that prefix.
+						</CardDescription>
+					</CardHeader>
+					<CardContent className="space-y-4">
+						<div class="space-y-2">
+							<label for="uploadDestination" class="text-sm font-medium">Upload into folder (optional)</label>
+							<Input
+								id="uploadDestination"
+								type="text"
+								placeholder="e.g. assets or slides/deck-a — leave empty for root"
+								autocomplete="off"
+							/>
+							<p class="text-xs text-slate-500">
+								Applies to single files, ZIP entry paths, and <em>Browse files</em>. Leading/trailing slashes are optional.
+							</p>
+						</div>
+						<div
+							id="dropzone"
+							class="border-2 border-dashed border-slate-300 rounded-lg p-12 text-center hover:border-blue-400 hover:bg-blue-50 transition-all cursor-pointer"
+						>
+							<input type="file" id="fileInput" class="hidden" multiple />
+							<input type="file" id="folderInput" class="hidden" multiple webkitdirectory />
+							<div class="flex flex-col items-center gap-2">
+								<div class="p-4 bg-slate-100 rounded-full text-slate-600">
+									<Upload class="w-8 h-8" />
+								</div>
+								<p class="font-medium text-slate-700">Drag & drop files or folders here</p>
+								<p class="text-xs text-slate-500">Supports .html, assets, and .zip extraction</p>
+								<div class="flex flex-wrap items-center justify-center gap-2 mt-2">
+									<Button variant="outline" size="sm" type="button" id="browseFilesBtn">
+										Browse files
+									</Button>
+									<Button variant="outline" size="sm" type="button" id="browseFolderBtn">
+										<Folder class="w-4 h-4 mr-1 inline" /> Browse folder
+									</Button>
+								</div>
+							</div>
+						</div>
+						<div id="uploadStatus" class="hidden">
+							<div class="w-full bg-slate-200 rounded-full h-2">
+								<div id="progressBar" class="bg-blue-600 h-2 rounded-full w-0 transition-all"></div>
+							</div>
+							<p id="progressText" class="text-xs text-slate-500 mt-2 text-center">Uploading...</p>
+						</div>
+					</CardContent>
+				</Card>
+			</div>
+		</div>
+	</div>
+
+    <script
+        is:inline
+        src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.2/jszip.min.js"
+        integrity="sha512-/ICos1xr6gGjsbC2d7Z6D0hmKAnNbkCv5Pp803Q75xgHowbEcgI4CVOHMHUux/ZorCuod6dzuJOjfNoCKV0tRw=="
+        crossorigin="anonymous"
+        referrerpolicy="no-referrer"
+    ></script>
+    <script define:vars={{ slug }}>
+        const dropzone = document.getElementById('dropzone');
+        const fileInput = document.getElementById('fileInput');
+        const folderInput = document.getElementById('folderInput');
+        const uploadDestination = document.getElementById('uploadDestination');
+        const uploadStatus = document.getElementById('uploadStatus');
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        document.getElementById('browseFilesBtn')?.addEventListener('click', () => fileInput?.click());
+        document.getElementById('browseFolderBtn')?.addEventListener('click', () => folderInput?.click());
+
+        /** @returns {'' | null} empty string if unset; null if invalid */
+        function readDestinationPrefix() {
+            const raw = uploadDestination?.value ?? '';
+            const t = raw.trim().replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '');
+            if (!t) return '';
+            const segments = t.split('/').filter(Boolean);
+            for (const seg of segments) {
+                if (seg === '.' || seg === '..' || seg.includes('\0')) return null;
+            }
+            return segments.join('/');
+        }
+
+        /** @returns {string | null} */
+        function normalizeRelativePath(raw) {
+            const t = String(raw).trim().replace(/\\/g, '/').replace(/^\/+/, '');
+            if (!t || t.includes('\0')) return null;
+            const segments = t.split('/').filter(Boolean);
+            for (const seg of segments) {
+                if (seg === '.' || seg === '..') return null;
+            }
+            return segments.join('/');
+        }
+
+        /** @param {string} destPrefix @param {string} relative @returns {string | null} */
+        function combineUploadPath(destPrefix, relative) {
+            const rel = normalizeRelativePath(relative);
+            if (rel === null) return null;
+            if (!destPrefix) return rel;
+            return `${destPrefix}/${rel}`;
+        }
+
+        /** @param {string} path @param {string} originalName */
+        function applyHtmlIndexRenamePreference(path, originalName) {
+            const lower = String(originalName).toLowerCase();
+            const isHtml = lower.endsWith('.html') || lower.endsWith('.htm');
+            if (!isHtml) return path;
+            const base = String(path).split('/').pop() || '';
+            if (/^index\.html$/i.test(base)) return path;
+            const ok = window.confirm(
+                'Save this HTML file as index.html?\n\n' +
+                    'Visitors can then open the deck at the folder URL without typing the file name.\n\n' +
+                    `Current file name: ${originalName}`
+            );
+            if (!ok) return path;
+            const segs = path.split('/');
+            segs[segs.length - 1] = 'index.html';
+            return segs.join('/');
+        }
+
+        dropzone?.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropzone.classList.add('border-blue-400', 'bg-blue-50');
+        });
+
+        dropzone?.addEventListener('dragleave', () => {
+            dropzone.classList.remove('border-blue-400', 'bg-blue-50');
+        });
+
+        dropzone?.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('border-blue-400', 'bg-blue-50');
+            handleFiles(e.dataTransfer?.files);
+        });
+
+        fileInput?.addEventListener('change', (e) => {
+            handleFiles(e.target?.files);
+            e.target.value = '';
+        });
+
+        folderInput?.addEventListener('change', (e) => {
+            handleFiles(e.target?.files);
+            e.target.value = '';
+        });
+
+        async function handleFiles(files) {
+            if (!files || files.length === 0) return;
+            const destPrefix = readDestinationPrefix();
+            if (destPrefix === null) {
+                alert('Invalid upload folder path. Use segments like assets or images/icons (no ..).');
+                return;
+            }
+            uploadStatus?.classList.remove('hidden');
+            let totalProcessed = 0;
+            const totalFiles = files.length;
+
+            for (const file of files) {
+                if (file.name.endsWith('.zip')) {
+                    progressText.innerText = `Extracting ${file.name}...`;
+                    await handleZip(file, destPrefix);
+                } else {
+                    progressText.innerText = `Uploading ${file.name}...`;
+                    const rel =
+                        file.webkitRelativePath && file.webkitRelativePath.length > 0
+                            ? file.webkitRelativePath
+                            : file.name;
+                    let path = combineUploadPath(destPrefix, rel);
+                    if (path === null) {
+                        alert(`Skipped unsafe path: ${rel}`);
+                        totalProcessed++;
+                        progressBar.style.width = `${(totalProcessed / totalFiles) * 100}%`;
+                        continue;
+                    }
+                    path = applyHtmlIndexRenamePreference(path, file.name);
+                    await uploadFile(file, path);
+                }
+                totalProcessed++;
+                progressBar.style.width = `${(totalProcessed / totalFiles) * 100}%`;
+            }
+
+            progressText.innerText = 'All files processed. Reloading...';
+            setTimeout(() => window.location.reload(), 1000);
+        }
+
+        /** Skip README.md and paths with any dot-prefixed segment (.git, .github, etc.) */
+        function shouldSkipZipUploadPath(rawPath) {
+            const normalized = String(rawPath).replace(/\\/g, '/');
+            const segments = normalized.split('/').filter(Boolean);
+            if (segments.length === 0) return true;
+            for (const seg of segments) {
+                if (seg.startsWith('.')) return true;
+            }
+            const base = segments[segments.length - 1];
+            if (/^readme\.md$/i.test(base)) return true;
+            return false;
+        }
+
+        function zipStemFromFileName(fileName) {
+            const base = String(fileName).split(/[/\\]/).pop() || '';
+            return base.replace(/\.zip$/i, '');
+        }
+
+        /** @param {string} rawPath */
+        function zipPathSegments(rawPath) {
+            const n = String(rawPath).replace(/\\/g, '/').replace(/^\/+/, '');
+            return n.split('/').filter(Boolean);
+        }
+
+        /**
+         * If every entry to upload sits under a single top-level folder whose name matches the zip
+         * basename (e.g. capabilities.zip → capabilities/), strip that segment so content lands at root.
+         */
+        function shouldStripZipWrapperFolder(zipFileName, pathsToUpload) {
+            const stem = zipStemFromFileName(zipFileName);
+            if (!stem || pathsToUpload.length === 0) return false;
+            return pathsToUpload.every((segs) => {
+                return segs.length >= 2 && segs[0].toLowerCase() === stem.toLowerCase();
+            });
+        }
+
+        async function handleZip(file, destPrefix) {
+            const zip = new JSZip();
+            const contents = await zip.loadAsync(file);
+            const entries = Object.entries(contents.files);
+
+            const pathsToUpload = entries
+                .filter(([path, zipEntry]) => !zipEntry.dir && !shouldSkipZipUploadPath(path))
+                .map(([path]) => zipPathSegments(path));
+            const stripWrapper = shouldStripZipWrapperFolder(file.name, pathsToUpload);
+
+            for (const [path, zipEntry] of entries) {
+                if (zipEntry.dir) continue;
+                if (shouldSkipZipUploadPath(path)) continue;
+                const segs = zipPathSegments(path);
+                const relPath = stripWrapper ? segs.slice(1).join('/') : segs.join('/');
+                const finalPath = combineUploadPath(destPrefix, relPath);
+                if (finalPath === null) continue;
+                const blob = await zipEntry.async('blob');
+                progressText.innerText = stripWrapper ? `Extracting ${relPath}...` : `Extracting ${path}...`;
+                await uploadFile(blob, finalPath);
+            }
+        }
+
+        async function uploadFile(blob, path) {
+            const formData = new FormData();
+            formData.append('file', blob);
+            formData.append('path', path);
+
+            const res = await fetch(`/admin/api/upload/${slug}`, {
+                method: 'POST',
+                body: formData
+            });
+            if (!res.ok) {
+                console.error('Upload failed', path, await res.text());
+            }
+        }
+    </script>
+	<script>
+		function visitorPasswordInputs() {
+			const newPwd = document.getElementById('new_password');
+			const confirmPwd = document.getElementById('confirm_password');
+			if (!(newPwd instanceof HTMLInputElement) || !(confirmPwd instanceof HTMLInputElement)) return null;
+			return { newPwd, confirmPwd };
+		}
+
+		function setVisitorPasswordFieldsVisible(show) {
+			const pair = visitorPasswordInputs();
+			if (!pair) return;
+			pair.newPwd.type = show ? 'text' : 'password';
+			pair.confirmPwd.type = show ? 'text' : 'password';
+		}
+
+		function updateVisitorPasswordToggleIcons(showing) {
+			document.querySelectorAll('[data-visitor-pw-toggle]').forEach((btn) => {
+				if (!(btn instanceof HTMLButtonElement)) return;
+				btn.setAttribute('aria-pressed', showing ? 'true' : 'false');
+				btn.setAttribute('aria-label', showing ? 'Hide password' : 'Show password');
+				btn.querySelector('.visitor-pw-icon-eye')?.classList.toggle('hidden', showing);
+				btn.querySelector('.visitor-pw-icon-eyeoff')?.classList.toggle('hidden', !showing);
+			});
+		}
+
+		document.querySelectorAll('[data-visitor-pw-toggle]').forEach((btn) => {
+			btn.addEventListener('click', () => {
+				if (!(btn instanceof HTMLButtonElement)) return;
+				const showing = btn.getAttribute('aria-pressed') === 'true';
+				const next = !showing;
+				setVisitorPasswordFieldsVisible(next);
+				updateVisitorPasswordToggleIcons(next);
+			});
+		});
+
+		document.getElementById('generateVisitorPassphrase')?.addEventListener('click', async () => {
+			const pair = visitorPasswordInputs();
+			if (!pair) return;
+			try {
+				const res = await fetch('/admin/api/generate-passphrase');
+				if (!res.ok) {
+					window.alert('Could not generate a passphrase. Try again or sign in again.');
+					return;
+				}
+				const data = (await res.json()) as { passphrase?: string };
+				if (typeof data.passphrase !== 'string') return;
+				pair.newPwd.value = data.passphrase;
+				pair.confirmPwd.value = data.passphrase;
+				setVisitorPasswordFieldsVisible(true);
+				updateVisitorPasswordToggleIcons(true);
+			} catch {
+				window.alert('Could not generate a passphrase. Check your connection and try again.');
+			}
+		});
+
+		document.querySelectorAll('button.copy-public-file-url-btn[data-copy-public-url]').forEach((btn) => {
+			if (!(btn instanceof HTMLButtonElement)) return;
+			btn.addEventListener('click', async () => {
+				const url = btn.getAttribute('data-copy-public-url');
+				if (!url) return;
+				try {
+					await navigator.clipboard.writeText(url);
+				} catch {
+					const ta = document.createElement('textarea');
+					ta.value = url;
+					ta.style.position = 'fixed';
+					ta.style.left = '-9999px';
+					document.body.appendChild(ta);
+					ta.select();
+					try {
+						document.execCommand('copy');
+					} finally {
+						document.body.removeChild(ta);
+					}
+				}
+			});
+		});
+
+		document.addEventListener('click', (e) => {
+			const el = e.target;
+			if (!(el instanceof Element)) return;
+			const btn = el.closest('.rename-toggle-btn[data-rename-target]');
+			if (!(btn instanceof HTMLButtonElement)) return;
+			const targetId = btn.getAttribute('data-rename-target');
+			const panel = targetId ? document.getElementById(targetId) : null;
+			if (!panel) return;
+			const wasHidden = panel.classList.contains('hidden');
+			document.querySelectorAll('.rename-editor').forEach((p) => p.classList.add('hidden'));
+			document.querySelectorAll('.rename-toggle-btn[data-rename-target]').forEach((b) => {
+				if (b instanceof HTMLButtonElement) b.setAttribute('aria-expanded', 'false');
+			});
+			if (wasHidden) {
+				panel.classList.remove('hidden');
+				btn.setAttribute('aria-expanded', 'true');
+				const input = panel.querySelector('input[name="new_relative_path"]');
+				if (input instanceof HTMLInputElement) input.focus();
+			}
+		});
+	</script>
+</Layout>

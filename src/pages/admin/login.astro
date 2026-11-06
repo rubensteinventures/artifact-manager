@@ -1,0 +1,89 @@
+---
+import { env } from 'cloudflare:workers';
+import Layout from '@/layouts/AdminLayout.astro';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/starwind/card/index.ts';
+import { Input } from '@/components/starwind/input/index.ts';
+import { Button } from '@/components/starwind/button/index.ts';
+import { Alert } from '@/components/starwind/alert/index.ts';
+import {
+	getClientIp,
+	checkLoginRateLimit,
+	verifyAdminCredentials,
+	recordFailedLoginAttempt,
+	clearLoginRateLimit,
+} from '@/lib/admin-auth';
+
+let error = '';
+
+if (Astro.request.method === 'POST') {
+	const clientIp = getClientIp(Astro.request);
+	const isRateLimited = await checkLoginRateLimit(env.SESSION, clientIp);
+
+	if (isRateLimited) {
+		Astro.response.status = 429;
+		error = 'Too many failed login attempts. Please wait a minute and try again.';
+	} else {
+		const formData = await Astro.request.formData();
+		const usernameRaw = formData.get('username');
+		const passwordRaw = formData.get('password');
+		const username = typeof usernameRaw === 'string' ? usernameRaw.trim() : '';
+		const password = typeof passwordRaw === 'string' ? passwordRaw : '';
+
+		const db = env.DB;
+		const admin =
+			username.length > 0
+				? await db
+						.prepare('SELECT username, password_hash FROM admins WHERE username = ?')
+						.bind(username)
+						.first()
+				: null;
+
+		// D1 returns snake_case columns; tolerate odd casings from tooling.
+		const row = admin as Record<string, unknown> | null;
+		const hash = row && (row.password_hash ?? row.PASSWORD_HASH);
+		const hashStr = typeof hash === 'string' ? hash : null;
+
+		const ok = await verifyAdminCredentials(username, password, hashStr);
+
+		if (ok) {
+			await clearLoginRateLimit(env.SESSION, clientIp);
+			await Astro.session?.regenerate();
+			Astro.session?.set('adminUsername', username);
+			return Astro.redirect('/admin');
+		} else {
+			await recordFailedLoginAttempt(env.SESSION, clientIp);
+			error = 'Invalid username or password';
+		}
+	}
+}
+// Logged-in GET /admin/login → /admin is handled in src/middleware.ts
+---
+
+<Layout title="Login">
+	<div class="flex justify-center items-center py-20">
+		<Card className="w-full max-w-md shadow-lg border-slate-200">
+			<CardHeader className="space-y-1">
+				<CardTitle className="text-2xl text-center">Admin Login</CardTitle>
+				<CardDescription className="text-center">Enter your credentials to manage presentations</CardDescription>
+			</CardHeader>
+			<CardContent>
+				<form method="POST" class="space-y-4">
+					<div class="space-y-2">
+						<label for="username" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Username</label>
+						<Input id="username" name="username" type="text" required />
+					</div>
+					<div class="space-y-2">
+						<label for="password" class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">Password</label>
+						<Input id="password" name="password" type="password" required />
+					</div>
+					{error && (
+						<Alert variant="destructive" className="mt-4">
+							{error}
+						</Alert>
+					)}
+					<Button type="submit" className="w-full mt-6" size="lg">Login</Button>
+				</form>
+			</CardContent>
+		</Card>
+	</div>
+</Layout>

@@ -11,6 +11,10 @@ import {
 	LOGIN_MAX_FAILED_ATTEMPTS,
 	isBlockedCrossSiteMutation,
 	applyAdminSecurityHeaders,
+	validateAdminSetupInput,
+	ensureAdminInitialized,
+	createInitialAdmin,
+	authenticateAdminLogin,
 } from '../src/lib/admin-auth.ts';
 import { verifySkillApiBearer } from '../src/lib/skill-api-auth.ts';
 import { parseCreateSkillPresentationBody } from '../src/lib/skill-presentations-payload.ts';
@@ -111,3 +115,186 @@ test('middleware.ts routes /content/* to content-viewer with SAMEORIGIN and gate
 	assert.match(uploadSrc, /ADMIN_UPLOAD_MAX_BYTES/);
 	assert.match(uploadSrc, /status:\s*413/);
 });
+
+function createInMemoryAdminsDb(initialAdmins = []) {
+	const admins = new Map();
+	for (const row of initialAdmins) {
+		admins.set(row.username, row.password_hash);
+	}
+	return {
+		admins,
+		prepare(sql) {
+			const normalized = sql.replace(/\s+/g, ' ').trim();
+			let boundArgs = [];
+			const stmt = {
+				bind(...args) {
+					boundArgs = args;
+					return stmt;
+				},
+				async first() {
+					if (/^SELECT COUNT\(\*\) AS count FROM admins$/i.test(normalized)) {
+						return { count: admins.size };
+					}
+					if (/^SELECT username, password_hash FROM admins WHERE username = \?$/i.test(normalized)) {
+						const [username] = boundArgs;
+						if (!admins.has(username)) return null;
+						return { username, password_hash: admins.get(username) };
+					}
+					throw new Error(`Unsupported first() query: ${normalized}`);
+				},
+				async run() {
+					if (
+						/^INSERT INTO admins \(username, password_hash\) SELECT \?, \? WHERE NOT EXISTS \(SELECT 1 FROM admins\)$/i.test(
+							normalized
+						)
+					) {
+						const [username, hash] = boundArgs;
+						if (admins.size > 0) {
+							return { meta: { changes: 0 } };
+						}
+						admins.set(username, hash);
+						return { meta: { changes: 1 } };
+					}
+					if (
+						/^INSERT INTO admins \(username, password_hash\) VALUES \(\?, \?\) ON CONFLICT\(username\) DO UPDATE SET password_hash = excluded\.password_hash$/i.test(
+							normalized
+						)
+					) {
+						const [username, hash] = boundArgs;
+						admins.set(username, hash);
+						return { meta: { changes: 1 } };
+					}
+					throw new Error(`Unsupported run() query: ${normalized}`);
+				},
+			};
+			return stmt;
+		},
+	};
+}
+
+test('validateAdminSetupInput validates username format, password length 8..128, and confirmation match', () => {
+	assert.equal(validateAdminSetupInput('', 'StrongPass123!', 'StrongPass123!').ok, false);
+	assert.equal(validateAdminSetupInput('admin user!', 'StrongPass123!', 'StrongPass123!').ok, false);
+	assert.equal(validateAdminSetupInput('admin', 'short7!', 'short7!').ok, false);
+	assert.equal(validateAdminSetupInput('admin', 'a'.repeat(129), 'a'.repeat(129)).ok, false);
+	assert.equal(validateAdminSetupInput('admin', 'StrongPass123!', 'Mismatch123!').ok, false);
+
+	const valid = validateAdminSetupInput('  admin_1@example.com  ', 'StrongPass123!', 'StrongPass123!');
+	assert.equal(valid.ok, true);
+	if (valid.ok) {
+		assert.equal(valid.username, 'admin_1@example.com');
+	}
+});
+
+test('ensureAdminInitialized detects empty D1 vs populated D1 vs valid ADMIN_USERNAME/ADMIN_PASSWORD env override', async () => {
+	const emptyDb = createInMemoryAdminsDb();
+	assert.deepEqual(await ensureAdminInitialized(emptyDb, {}), {
+		initialized: false,
+		hasEnvOverride: false,
+	});
+
+	// Short or whitespace env vars are ignored
+	assert.deepEqual(
+		await ensureAdminInitialized(emptyDb, {
+			ADMIN_USERNAME: '   ',
+			ADMIN_PASSWORD: 'StrongPass123!',
+		}),
+		{ initialized: false, hasEnvOverride: false }
+	);
+	assert.deepEqual(
+		await ensureAdminInitialized(emptyDb, {
+			ADMIN_USERNAME: 'admin',
+			ADMIN_PASSWORD: 'short',
+		}),
+		{ initialized: false, hasEnvOverride: false }
+	);
+
+	// Valid env override marks admin as initialized even when D1 is empty
+	assert.deepEqual(
+		await ensureAdminInitialized(emptyDb, {
+			ADMIN_USERNAME: 'admin',
+			ADMIN_PASSWORD: 'StrongPass123!',
+		}),
+		{ initialized: true, hasEnvOverride: true }
+	);
+
+	// Populated D1 marks admin as initialized without env override
+	const seededDb = createInMemoryAdminsDb([
+		{ username: 'existing', password_hash: '$2b$10$5lT6NLQxxB8OOC6uYU/3AeF1Q1/VWyzC.w0DX8Q/iujyBb6GrT8oy' },
+	]);
+	assert.deepEqual(await ensureAdminInitialized(seededDb, {}), {
+		initialized: true,
+		hasEnvOverride: false,
+	});
+});
+
+test('createInitialAdmin atomically creates the first admin only when uninitialized and blocks subsequent attempts', async () => {
+	const db = createInMemoryAdminsDb();
+
+	// Blocked if env override is active
+	const blockedByEnv = await createInitialAdmin(
+		db,
+		{ username: 'webadmin', password: 'StrongPass123!', confirmPassword: 'StrongPass123!' },
+		{ ADMIN_USERNAME: 'envadmin', ADMIN_PASSWORD: 'EnvStrongPassword123!' }
+	);
+	assert.equal(blockedByEnv.ok, false);
+	if (!blockedByEnv.ok) {
+		assert.equal(blockedByEnv.alreadyInitialized, true);
+	}
+	assert.equal(db.admins.size, 0);
+
+	// First-run setup succeeds when D1 is empty and no env override is active
+	const created = await createInitialAdmin(
+		db,
+		{ username: '  firstadmin  ', password: 'FirstAdminPass123!', confirmPassword: 'FirstAdminPass123!' },
+		{}
+	);
+	assert.deepEqual(created, { ok: true, username: 'firstadmin' });
+	assert.equal(db.admins.size, 1);
+	assert.equal(await authenticateAdminLogin(db, 'firstadmin', 'FirstAdminPass123!', {}), true);
+
+	// Subsequent setup attempt is permanently locked
+	const secondAttempt = await createInitialAdmin(
+		db,
+		{ username: 'secondadmin', password: 'SecondAdminPass123!', confirmPassword: 'SecondAdminPass123!' },
+		{}
+	);
+	assert.equal(secondAttempt.ok, false);
+	if (!secondAttempt.ok) {
+		assert.equal(secondAttempt.alreadyInitialized, true);
+	}
+	assert.equal(db.admins.size, 1);
+});
+
+test('authenticateAdminLogin allows ADMIN_USERNAME and ADMIN_PASSWORD env override to recover/reset an existing D1 admin password and persist to D1', async () => {
+	const oldHash = '$2b$10$5lT6NLQxxB8OOC6uYU/3AeF1Q1/VWyzC.w0DX8Q/iujyBb6GrT8oy'; // 'testpass123'
+	const db = createInMemoryAdminsDb([{ username: 'testadmin', password_hash: oldHash }]);
+
+	// Before override: old password works, new password fails
+	assert.equal(await authenticateAdminLogin(db, 'testadmin', 'testpass123', {}), true);
+	assert.equal(await authenticateAdminLogin(db, 'testadmin', 'RecoveredPass999!', {}), false);
+
+	// With recovery env vars set: wrong password fails, recovery password succeeds and upserts D1
+	const recoveryEnv = {
+		ADMIN_USERNAME: 'testadmin',
+		ADMIN_PASSWORD: 'RecoveredPass999!',
+	};
+	assert.equal(await authenticateAdminLogin(db, 'testadmin', 'wrongpass', recoveryEnv), false);
+	assert.equal(await authenticateAdminLogin(db, 'testadmin', 'RecoveredPass999!', recoveryEnv), true);
+
+	// After removing recovery env vars: the recovered password remains persisted in D1 and old password no longer works
+	assert.equal(await authenticateAdminLogin(db, 'testadmin', 'RecoveredPass999!', {}), true);
+	assert.equal(await authenticateAdminLogin(db, 'testadmin', 'testpass123', {}), false);
+
+	// Also supports recovering with a brand-new username if the original username was forgotten
+	const newUsernameEnv = {
+		ADMIN_USERNAME: 'recovered_owner',
+		ADMIN_PASSWORD: 'OwnerNewPass888!',
+	};
+	assert.equal(
+		await authenticateAdminLogin(db, 'recovered_owner', 'OwnerNewPass888!', newUsernameEnv),
+		true
+	);
+	assert.equal(await authenticateAdminLogin(db, 'recovered_owner', 'OwnerNewPass888!', {}), true);
+});
+

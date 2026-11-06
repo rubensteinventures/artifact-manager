@@ -41,7 +41,11 @@ test('entire repository contains zero proprietary branding or legacy Cloudflare 
 	);
 
 	for (const file of allFiles) {
-		const content = fs.readFileSync(file, 'utf8');
+		const rawContent = fs.readFileSync(file, 'utf8');
+		const content = rawContent.replaceAll(
+			'https://github.com/jaronrubenstein/artifact-manager',
+			''
+		);
 		for (const pattern of forbiddenPatterns) {
 			assert.doesNotMatch(
 				content,
@@ -54,6 +58,13 @@ test('entire repository contains zero proprietary branding or legacy Cloudflare 
 
 test('README.md documents new Cloudflare account setup, branding variables, and /admin/api/v1/skill paths', () => {
 	const readme = fs.readFileSync(path.join(rootDir, 'README.md'), 'utf8');
+	assert.match(
+		readme,
+		/https:\/\/deploy\.workers\.cloudflare\.com\/\?url=https:\/\/github\.com\/jaronrubenstein\/artifact-manager/
+	);
+	assert.match(readme, /\/admin\/setup/);
+	assert.match(readme, /ADMIN_USERNAME/);
+	assert.match(readme, /ADMIN_PASSWORD/);
 	assert.match(readme, /wrangler d1 create/);
 	assert.match(readme, /wrangler r2 bucket create/);
 	assert.match(readme, /wrangler kv namespace create/);

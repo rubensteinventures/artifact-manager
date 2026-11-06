@@ -1,5 +1,7 @@
 # Presentation & Artifact Manager Worker
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/jaronrubenstein/artifact-manager)
+
 A single, white-label Cloudflare Worker application that both **serves interactive HTML presentations** from Cloudflare R2 (`/content/{slug}/*`) and provides a **full administration dashboard & automation API** (`/admin/*`) backed by Cloudflare D1, R2, and KV.
 
 ## Features
@@ -28,6 +30,7 @@ A single, white-label Cloudflare Worker application that both **serves interacti
 | `/` | Public | White-labeled landing page |
 | `/content/{slug}` & `/content/{slug}/*` | Public or Visitor Basic Auth | Serves presentation files from R2 under `content/{slug}/` |
 | `/admin` | Admin Session | Presentation dashboard (create, search, sort) |
+| `/admin/setup` | Public (First-Run Only) | One-time initial administrator setup screen when `admins` has `0` rows (permanently locks once an admin is configured) |
 | `/admin/login` | Public (rate-limited) | Administrator login |
 | `/admin/logout` & `/admin/api/logout` | Admin Session | Ends admin session and redirects to `/admin/login` |
 | `/admin/presentations/{slug}` | Admin Session | Manage presentation files, folders, and visitor credentials |
@@ -38,9 +41,27 @@ A single, white-label Cloudflare Worker application that both **serves interacti
 
 ---
 
-## Setting Up on a New Cloudflare Account
+## One-Click Deploy to Cloudflare
 
-Follow these steps from scratch to deploy this application to a brand-new Cloudflare account.
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/jaronrubenstein/artifact-manager)
+
+Clicking **Deploy to Cloudflare** automates the entire setup on your Cloudflare account:
+1. Clones this repository into your GitHub or GitLab account.
+2. Automatically provisions the D1 database (`DB`), R2 bucket (`BUCKET`), and KV namespace (`SESSION`) and wires their IDs into `wrangler.jsonc`.
+3. Runs `npm run deploy` (`astro build`, remote D1 schema migrations via `wrangler d1 migrations apply DB --remote`, and `wrangler deploy`).
+4. Once deployed, open `https://<your-worker>.<your-subdomain>.workers.dev/admin` in your browser—it will automatically redirect to `/admin/setup` where you can create your initial administrator username and password.
+
+### Optional: Environment Variable Override & Account Recovery (`ADMIN_USERNAME` / `ADMIN_PASSWORD`)
+
+You can also configure `ADMIN_USERNAME` and `ADMIN_PASSWORD` (at least 8 characters) as Worker variables/secrets in the Cloudflare Dashboard (**Workers & Pages → your worker → Settings → Variables and Secrets**):
+- **Zero-Touch Initial Setup:** If `ADMIN_USERNAME` and `ADMIN_PASSWORD` are set before your first visit, `/admin/setup` is skipped automatically and signing in at `/admin/login` with those credentials initializes your admin record in D1.
+- **Lost Username / Password Recovery:** Even after an administrator account already exists in D1, setting `ADMIN_USERNAME` and `ADMIN_PASSWORD` and logging in at `/admin/login` will reset/upsert that administrator's bcrypt hash in D1. Once you have signed in, you can remove `ADMIN_USERNAME` and `ADMIN_PASSWORD` from the Cloudflare Dashboard and your new credentials will remain saved in D1.
+
+---
+
+## Manual CLI Setup on a New Cloudflare Account
+
+If you prefer to provision resources manually from your terminal using Wrangler instead of the Deploy to Cloudflare button, follow these steps:
 
 ### Prerequisites
 
@@ -115,19 +136,18 @@ npx wrangler d1 migrations apply presentations_db --remote
 
 ### Step 5: Create Your First Admin User
 
-Generate a bcrypt hash (cost `10`) for your administrator password:
+You have three ways to create the initial administrator account:
+
+1. **Browser First-Run Wizard (Recommended):** Deploy the Worker (Step 8) and visit `/admin` in your browser. When the `admins` table is empty, the Worker automatically redirects to `/admin/setup` where you can choose your initial username and password. Once created, `/admin/setup` permanently locks itself.
+2. **Environment Variable Override / Recovery (`ADMIN_USERNAME` & `ADMIN_PASSWORD`):** Set `ADMIN_USERNAME` and `ADMIN_PASSWORD` (`>= 8` characters) in your Worker's Variables & Secrets, then sign in at `/admin/login`. The Worker will automatically hash and upsert your credentials into D1.
+3. **Manual Wrangler CLI:** Generate a bcrypt hash (cost `10`) and insert it directly into D1:
 
 ```bash
 node -e "import('bcryptjs').then(b => console.log(b.default.hashSync('CHANGE_ME_STRONG_PASSWORD', 10)))"
-```
-
-Insert the admin record into your remote D1 database using the generated hash:
-
-```bash
 npx wrangler d1 execute presentations_db --remote --command "INSERT INTO admins (username, password_hash) VALUES ('admin', 'PASTE_BCRYPT_HASH_HERE');"
 ```
 
-See [docs/admin_setup.md](docs/admin_setup.md) for additional details on managing local vs. remote admin accounts.
+See [docs/admin_setup.md](docs/admin_setup.md) for additional details on managing local vs. remote admin accounts and password recovery.
 
 ### Step 6: Configure Custom Branding (Optional)
 
@@ -160,8 +180,8 @@ npm run build
 npx wrangler deploy
 ```
 
-#### Attaching a Domain or Enabling `workers.dev`
-By default, [`wrangler.jsonc`](wrangler.jsonc) sets `"workers_dev": false` and `"preview_urls": false` so your Worker is only reachable on custom domains or routes you attach in the Cloudflare Dashboard (**Workers & Pages → your worker → Settings → Domains & Routes**). If you want to use a `*.workers.dev` subdomain instead, set `"workers_dev": true` in `wrangler.jsonc` before deploying.
+#### Attaching a Custom Domain or Locking Down `workers.dev`
+By default, [`wrangler.jsonc`](wrangler.jsonc) sets `"workers_dev": true` so one-click and new deployments get a live `*.workers.dev` URL out of the box. Once you attach a custom domain or route in the Cloudflare Dashboard (**Workers & Pages → your worker → Settings → Domains & Routes**), you can optionally set `"workers_dev": false` in `wrangler.jsonc` if you only want the Worker reachable via your custom domain.
 
 ---
 

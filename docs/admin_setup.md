@@ -1,6 +1,10 @@
-# Admin Setup
+# Admin Setup & Account Recovery
 
-To access the `/admin` dashboard, you need to add at least one administrator account to the `admins` table in your `presentations_db` Cloudflare D1 database.
+To access the `/admin` dashboard, at least one administrator account must be configured. You can set up or recover your administrator account in three ways:
+
+1. **Browser First-Run Setup (`/admin/setup`):** When `admins` in D1 has `0` rows and no `ADMIN_USERNAME`/`ADMIN_PASSWORD` override is set, visiting `/admin` redirects to `/admin/setup` so you can create the initial administrator in your browser. Once created, `/admin/setup` permanently locks itself.
+2. **Environment Variable Override & Recovery (`ADMIN_USERNAME` / `ADMIN_PASSWORD`):** Setting `ADMIN_USERNAME` and `ADMIN_PASSWORD` (at least 8 characters) in Cloudflare Worker Variables/Secrets allows you to sign in at `/admin/login` and automatically upserts the bcrypt password hash into D1 (`ON CONFLICT(username) DO UPDATE`). You can use this both for initial setup and to recover a lost username or password—after logging in once, the updated bcrypt hash persists in D1 even if you delete the environment variables.
+3. **Wrangler CLI (`wrangler d1 execute`):** Manually hash a password with `bcryptjs` and insert it into D1.
 
 **Important:** `npx wrangler dev` and `npx wrangler dev --remote` use **different** D1 instances:
 

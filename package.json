@@ -27,8 +27,23 @@
     "test": "node --test tests/*.test.mjs",
     "generate-types": "wrangler types",
     "db:migrate:local": "wrangler d1 migrations apply presentations_db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
     "db:seed:local": "wrangler d1 execute presentations_db --local --file=seed/local.sql",
-    "db:setup:local": "npm run db:migrate:local && npm run db:seed:local"
+    "db:setup:local": "npm run db:migrate:local && npm run db:seed:local",
+    "deploy": "npm run build && npm run db:migrate:remote && wrangler deploy"
+  },
+  "cloudflare": {
+    "bindings": {
+      "DB": {
+        "description": "D1 SQLite database storing presentation metadata, visitor Basic Auth hashes, and administrator accounts"
+      },
+      "BUCKET": {
+        "description": "R2 bucket storing static HTML presentation files and assets under content/{slug}/"
+      },
+      "SESSION": {
+        "description": "KV namespace storing server-side administrator sessions and login rate-limit counters"
+      }
+    }
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

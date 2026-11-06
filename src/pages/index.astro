@@ -1,0 +1,74 @@
+---
+import { env } from 'cloudflare:workers';
+import '../styles/global.css';
+import { Projector } from 'lucide-astro';
+import { getBrandingConfig } from '@/lib/branding';
+
+const branding = getBrandingConfig(
+	env as unknown as Record<string, unknown>,
+	Astro.url
+);
+const currentYear = new Date().getFullYear();
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<link rel="apple-touch-icon" href="/favicon.svg" />
+		<meta name="theme-color" content="#0f172a" />
+		<title>{branding.heroTitle} | {branding.orgName}</title>
+	</head>
+	<body class="min-h-screen bg-white text-slate-900 flex flex-col font-sans selection:bg-blue-100">
+		<header class="border-b border-slate-100 py-6 px-8 flex justify-between items-center">
+			<div class="flex items-center gap-3">
+				{branding.logoUrl ? (
+					<img
+						src={branding.logoUrl}
+						alt={branding.orgName}
+						class="h-10 w-auto"
+					/>
+				) : (
+					<div class="flex items-center gap-2.5 text-xl font-bold text-slate-900">
+						<Projector class="h-8 w-8 shrink-0 text-blue-600" aria-hidden="true" />
+						<span>{branding.orgName}</span>
+					</div>
+				)}
+			</div>
+			<nav class="hidden md:flex space-x-8 text-sm font-semibold tracking-wide uppercase">
+				{branding.orgUrl && (
+					<a
+						href={branding.orgUrl}
+						target="_blank"
+						rel="noopener noreferrer"
+						class="text-slate-600 hover:text-blue-600 transition-colors"
+					>
+						Website
+					</a>
+				)}
+				<span class="text-blue-600 border-b-2 border-blue-600 pb-1">
+					Presentations
+				</span>
+			</nav>
+		</header>
+
+		<main class="flex-1 flex flex-col">
+			<div class="bg-slate-900 text-white py-24 px-8 min-h-[60vh] flex items-center flex-1">
+				<div class="max-w-4xl mx-auto text-center space-y-6">
+					<h1 class="text-5xl md:text-6xl font-black tracking-tight leading-tight">
+						{branding.heroTitle}
+					</h1>
+					<p class="text-xl text-slate-300 max-w-2xl mx-auto font-light leading-relaxed">
+						{branding.heroSubtitle}
+					</p>
+				</div>
+			</div>
+		</main>
+
+		<footer class="mt-auto border-t border-slate-100 py-12 px-8 text-center text-slate-400 text-sm">
+			<p>© {currentYear} {branding.orgName}. All rights reserved.</p>
+		</footer>
+	</body>
+</html>

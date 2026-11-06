@@ -1,6 +1,6 @@
 # Presentation & Artifact Manager Worker
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/jaronrubenstein/artifact-manager)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/rubensteinventures/artifact-manager)
 
 A single, white-label Cloudflare Worker application that both **serves interactive HTML presentations** from Cloudflare R2 (`/content/{slug}/*`) and provides a **full administration dashboard & automation API** (`/admin/*`) backed by Cloudflare D1, R2, and KV.
 
@@ -43,7 +43,7 @@ A single, white-label Cloudflare Worker application that both **serves interacti
 
 ## One-Click Deploy to Cloudflare
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/jaronrubenstein/artifact-manager)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/rubensteinventures/artifact-manager)
 
 Clicking **Deploy to Cloudflare** automates the entire setup on your Cloudflare account:
 1. Clones this repository into your GitHub or GitLab account.

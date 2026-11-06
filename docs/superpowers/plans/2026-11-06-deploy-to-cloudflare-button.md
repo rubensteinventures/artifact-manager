@@ -181,7 +181,7 @@ git commit -m "feat: add /admin/setup screen and env login override/recovery"
 Add assertions verifying:
 - `package.json` defines `"db:migrate:remote": "wrangler d1 migrations apply DB --remote"`, `"deploy": "npm run build && npm run db:migrate:remote && wrangler deploy"`, and `"cloudflare.bindings"` descriptions for `DB`, `BUCKET`, and `SESSION`.
 - `wrangler.jsonc` sets `"workers_dev": true` and does not include `"preview_id": "YOUR_PREVIEW_KV_NAMESPACE_ID"`.
-- `README.md` includes the `https://deploy.workers.cloudflare.com/?url=https://github.com/jaronrubenstein/artifact-manager` button badge, documents `/admin/setup`, and documents the `ADMIN_USERNAME` / `ADMIN_PASSWORD` override and account recovery workflow.
+- `README.md` includes the `https://deploy.workers.cloudflare.com/?url=https://github.com/rubensteinventures/artifact-manager` button badge, documents `/admin/setup`, and documents the `ADMIN_USERNAME` / `ADMIN_PASSWORD` override and account recovery workflow.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
@@ -197,7 +197,7 @@ Expected: FAIL on missing `deploy` script, `workers_dev: true`, and Deploy to Cl
    - Set `"workers_dev": true` (and remove `"preview_urls": false`).
    - Remove `"preview_id": "YOUR_PREVIEW_KV_NAMESPACE_ID"` from `kv_namespaces[0]`.
 3. In `README.md` and `docs/admin_setup.md`:
-   - Add the `[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/jaronrubenstein/artifact-manager)` badge near the top of `README.md`.
+   - Add the `[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/rubensteinventures/artifact-manager)` badge near the top of `README.md`.
    - Add a **One-Click Deploy to Cloudflare** section explaining how the button provisions D1 (`DB`), R2 (`BUCKET`), and KV (`SESSION`), applies D1 migrations, and deploys the Worker, after which visiting `/admin` opens the one-time `/admin/setup` screen.
    - Document how `ADMIN_USERNAME` and `ADMIN_PASSWORD` can be set in Cloudflare Worker Variables/Secrets both to skip `/admin/setup` on first deploy and to recover/reset a lost admin username or password (syncing the new bcrypt hash into D1 upon login).
 

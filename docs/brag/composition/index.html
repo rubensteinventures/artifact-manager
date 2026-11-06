@@ -1,0 +1,1107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>Presentation Manager — Launch Video</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script src="assets/music/audio-data.js"></script>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        margin: 0;
+        background: #0f172a;
+        color: #f8fafc;
+        font-family: system-ui, -apple-system, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      #root {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #0f172a;
+      }
+
+      /* Persistent ambient background layer */
+      .bg-layer {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        overflow: hidden;
+      }
+
+      .bg-grid {
+        position: absolute;
+        inset: 0;
+        background-image:
+          linear-gradient(to right, rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+          linear-gradient(to bottom, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
+        background-size: 64px 64px;
+      }
+
+      .ambient-glow {
+        position: absolute;
+        border-radius: 9999px;
+        pointer-events: none;
+      }
+
+      #ambient-glow-1 {
+        width: 820px;
+        height: 820px;
+        top: -220px;
+        left: -140px;
+        background: radial-gradient(circle, rgba(37, 99, 235, 0.34) 0%, rgba(37, 99, 235, 0) 70%);
+      }
+
+      #ambient-glow-2 {
+        width: 760px;
+        height: 760px;
+        bottom: -240px;
+        right: -120px;
+        background: radial-gradient(circle, rgba(56, 189, 248, 0.28) 0%, rgba(56, 189, 248, 0) 70%);
+      }
+
+      .clip {
+        position: absolute;
+        inset: 0;
+      }
+
+      .scene-stage {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* Shared top navigation bar modeled on src/pages/index.astro & AdminLayout.astro */
+      .app-topbar {
+        height: 88px;
+        padding: 0 72px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: #ffffff;
+        border-bottom: 2px solid #cbd5e1;
+        color: #0f172a;
+        flex-shrink: 0;
+      }
+
+      .brand-lockup {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        font-size: 28px;
+        font-weight: 800;
+        color: #0f172a;
+        letter-spacing: -0.02em;
+      }
+
+      .brand-icon {
+        width: 38px;
+        height: 38px;
+        color: #1d4ed8;
+        flex-shrink: 0;
+      }
+
+      .topbar-right {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+      }
+
+      .nav-tab {
+        font-size: 18px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        color: #1d4ed8;
+        padding-bottom: 6px;
+        border-bottom: 3px solid #1d4ed8;
+      }
+
+      .route-chip {
+        font-family: ui-monospace, monospace;
+        font-size: 18px;
+        font-weight: 700;
+        padding: 8px 16px;
+        border-radius: 8px;
+        background: #f1f5f9;
+        color: #0f172a;
+        border: 2px solid #cbd5e1;
+      }
+
+      /* Scene 1: Public Homepage Hero (/) */
+      .s1-body {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        padding: 0 110px;
+        text-align: center;
+      }
+
+      .eyebrow-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 24px;
+        border-radius: 999px;
+        background: #1e293b;
+        border: 2px solid #38bdf8;
+        color: #f8fafc;
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        margin-bottom: 32px;
+      }
+
+      .eyebrow-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 999px;
+        background: #38bdf8;
+      }
+
+      .s1-title {
+        font-size: 104px;
+        font-weight: 900;
+        line-height: 1.04;
+        letter-spacing: -0.03em;
+        color: #f8fafc;
+        margin-bottom: 24px;
+      }
+
+      .s1-subtitle {
+        font-size: 36px;
+        font-weight: 500;
+        color: #e2e8f0;
+        margin-bottom: 52px;
+      }
+
+      .s1-pills {
+        display: flex;
+        gap: 28px;
+      }
+
+      .arch-pill {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 20px 32px;
+        border-radius: 16px;
+        background: #1e293b;
+        border: 2px solid #475569;
+        color: #f8fafc;
+      }
+
+      .arch-pill-code {
+        font-family: ui-monospace, monospace;
+        font-size: 24px;
+        font-weight: 700;
+        color: #38bdf8;
+      }
+
+      .arch-pill-label {
+        font-size: 22px;
+        font-weight: 600;
+        color: #f8fafc;
+      }
+
+      /* Scene 2: Admin Dashboard (/admin) */
+      .s2-body {
+        flex: 1;
+        padding: 44px 88px;
+        display: flex;
+        flex-direction: column;
+        gap: 28px;
+        background: #f8fafc;
+        color: #0f172a;
+      }
+
+      .s2-header-row {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+      }
+
+      .s2-h1 {
+        font-size: 52px;
+        font-weight: 800;
+        color: #0f172a;
+        letter-spacing: -0.02em;
+      }
+
+      .s2-sub {
+        font-size: 24px;
+        color: #334155;
+        font-weight: 500;
+        margin-top: 4px;
+      }
+
+      .dashboard-card {
+        background: #ffffff;
+        border: 2px solid #cbd5e1;
+        border-radius: 20px;
+        padding: 32px 36px;
+        box-shadow: 0 20px 40px -15px rgba(15, 23, 42, 0.08);
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+      }
+
+      .search-bar {
+        width: 100%;
+        padding: 18px 24px;
+        border-radius: 12px;
+        border: 2px solid #cbd5e1;
+        background: #f8fafc;
+        font-size: 22px;
+        color: #334155;
+        font-weight: 500;
+      }
+
+      .table-header,
+      .table-row {
+        display: grid;
+        grid-template-columns: 2.3fr 1.6fr 1fr 1.2fr 1.3fr;
+        align-items: center;
+        padding: 18px 16px;
+        gap: 16px;
+      }
+
+      .table-header {
+        border-bottom: 2px solid #cbd5e1;
+        font-size: 20px;
+        font-weight: 700;
+        color: #334155;
+      }
+
+      .table-row {
+        border-bottom: 2px solid #e2e8f0;
+        background: #ffffff;
+        border-radius: 12px;
+      }
+
+      .row-name {
+        font-size: 24px;
+        font-weight: 700;
+        color: #0f172a;
+      }
+
+      .row-slug {
+        font-family: ui-monospace, monospace;
+        font-size: 21px;
+        font-weight: 600;
+        color: #1e293b;
+      }
+
+      .row-date {
+        font-size: 21px;
+        font-weight: 500;
+        color: #334155;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 8px 18px;
+        border-radius: 999px;
+        font-size: 20px;
+        font-weight: 700;
+      }
+
+      .badge-public {
+        background: #dcfce7;
+        color: #14532d;
+        border: 2px solid #86efac;
+      }
+
+      .badge-protected {
+        background: #fef3c7;
+        color: #78350f;
+        border: 2px solid #fcd34d;
+      }
+
+      .badge-needs-pw {
+        background: #fef9c3;
+        color: #713f12;
+        border: 2px solid #fde047;
+      }
+
+      .row-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+      }
+
+      .btn-outline {
+        padding: 10px 20px;
+        border-radius: 10px;
+        border: 2px solid #cbd5e1;
+        background: #ffffff;
+        font-size: 19px;
+        font-weight: 700;
+        color: #0f172a;
+      }
+
+      /* Scene 3: Presentation Detail (/admin/presentations/sample-deck) */
+      .s3-body {
+        flex: 1;
+        padding: 36px 80px;
+        background: #f8fafc;
+        color: #0f172a;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+      }
+
+      .s3-title-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .s3-title-left {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+      }
+
+      .s3-h1 {
+        font-size: 46px;
+        font-weight: 800;
+        color: #0f172a;
+        letter-spacing: -0.02em;
+      }
+
+      .s3-grid {
+        display: grid;
+        grid-template-columns: 1fr 1.55fr;
+        gap: 28px;
+        flex: 1;
+      }
+
+      .ui-card {
+        background: #ffffff;
+        border: 2px solid #cbd5e1;
+        border-radius: 20px;
+        padding: 28px 32px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        box-shadow: 0 16px 32px -12px rgba(15, 23, 42, 0.07);
+      }
+
+      .card-title-inline {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 28px;
+        font-weight: 800;
+        color: #0f172a;
+      }
+
+      .card-desc {
+        font-size: 20px;
+        color: #334155;
+        font-weight: 500;
+      }
+
+      .field-group {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .field-label {
+        font-size: 20px;
+        font-weight: 700;
+        color: #0f172a;
+      }
+
+      .field-input {
+        padding: 14px 18px;
+        border-radius: 10px;
+        border: 2px solid #cbd5e1;
+        background: #f8fafc;
+        font-family: ui-monospace, monospace;
+        font-size: 21px;
+        font-weight: 700;
+        color: #0f172a;
+      }
+
+      .btn-passphrase {
+        position: relative;
+        padding: 16px 22px;
+        border-radius: 12px;
+        border: 2px solid #1d4ed8;
+        background: #eff6ff;
+        color: #1e3a8a;
+        font-size: 21px;
+        font-weight: 800;
+        text-align: center;
+      }
+
+      .btn-primary-dark {
+        padding: 16px 22px;
+        border-radius: 12px;
+        background: #0f172a;
+        color: #ffffff;
+        font-size: 21px;
+        font-weight: 700;
+        text-align: center;
+      }
+
+      .file-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .file-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 16px;
+        border-radius: 10px;
+        background: #f8fafc;
+        border: 2px solid #e2e8f0;
+      }
+
+      .file-name {
+        font-family: ui-monospace, monospace;
+        font-size: 20px;
+        font-weight: 700;
+        color: #0f172a;
+      }
+
+      .file-size {
+        font-size: 19px;
+        font-weight: 700;
+        color: #334155;
+      }
+
+      .dropzone-box {
+        margin-top: auto;
+        border: 3px dashed #3b82f6;
+        border-radius: 16px;
+        background: #eff6ff;
+        padding: 24px;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .dropzone-title {
+        font-size: 24px;
+        font-weight: 800;
+        color: #0f172a;
+      }
+
+      .dropzone-sub {
+        font-size: 19px;
+        font-weight: 600;
+        color: #1e3a8a;
+      }
+
+      /* Simulated cursor */
+      #sim-cursor {
+        position: absolute;
+        width: 36px;
+        height: 36px;
+        top: 680px;
+        left: 340px;
+        z-index: 30;
+        pointer-events: none;
+      }
+
+      /* Scene 4: Architecture Pillars & Final Lockup */
+      .s4-body {
+        flex: 1;
+        padding: 64px 96px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+
+      .pillar-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 28px;
+      }
+
+      .pillar-card {
+        background: #1e293b;
+        border: 2px solid #475569;
+        border-radius: 20px;
+        padding: 32px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      .pillar-route {
+        font-family: ui-monospace, monospace;
+        font-size: 21px;
+        font-weight: 700;
+        color: #38bdf8;
+      }
+
+      .pillar-title {
+        font-size: 32px;
+        font-weight: 800;
+        color: #f8fafc;
+      }
+
+      .pillar-desc {
+        font-size: 22px;
+        line-height: 1.45;
+        color: #e2e8f0;
+        font-weight: 500;
+      }
+
+      .outro-lockup {
+        background: #1e293b;
+        border: 2px solid #38bdf8;
+        border-radius: 24px;
+        padding: 44px 56px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .outro-title {
+        font-size: 68px;
+        font-weight: 900;
+        color: #f8fafc;
+        letter-spacing: -0.03em;
+      }
+
+      .outro-tagline {
+        font-size: 28px;
+        font-weight: 600;
+        color: #e2e8f0;
+        margin-top: 8px;
+      }
+
+      .outro-badge {
+        padding: 18px 28px;
+        border-radius: 14px;
+        background: #0f172a;
+        border: 2px solid #38bdf8;
+        font-family: ui-monospace, monospace;
+        font-size: 22px;
+        font-weight: 700;
+        color: #38bdf8;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-width="1920"
+      data-height="1080"
+      data-duration="20"
+    >
+      <!-- Persistent Ambient Background Layer -->
+      <div class="bg-layer" data-layout-allow-overflow>
+        <div class="bg-grid"></div>
+        <div id="ambient-glow-1" class="ambient-glow"></div>
+        <div id="ambient-glow-2" class="ambient-glow"></div>
+      </div>
+
+      <!-- SCENE 1: Public Homepage Hero (0.0s - 4.4s) -->
+      <section id="scene-1" class="clip" data-start="0" data-duration="4.4" data-track-index="0">
+        <div id="s1-stage" class="scene-stage">
+          <header class="app-topbar">
+            <div class="brand-lockup">
+              <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <path d="M2 3h20" />
+                <path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3" />
+                <path d="m7 21 5-5 5 5" />
+              </svg>
+              <span>Presentation Manager</span>
+            </div>
+            <div class="topbar-right">
+              <span class="nav-tab">PRESENTATIONS</span>
+            </div>
+          </header>
+
+          <div class="s1-body">
+            <div id="s1-eyebrow" class="eyebrow-pill">
+              <span class="eyebrow-dot"></span>
+              <span>Unified Cloudflare Worker · R2 + D1 + KV</span>
+            </div>
+            <h1 id="s1-title" class="s1-title">Interactive Presentations</h1>
+            <p id="s1-subtitle" class="s1-subtitle">Explore shared presentations and interactive decks.</p>
+            <div class="s1-pills">
+              <div id="s1-pill-1" class="arch-pill">
+                <span class="arch-pill-code">/content/{slug}/*</span>
+                <span class="arch-pill-label">R2 Edge Viewer + Basic Auth</span>
+              </div>
+              <div id="s1-pill-2" class="arch-pill">
+                <span class="arch-pill-code">/admin</span>
+                <span class="arch-pill-label">Astro SSR Dashboard + Skill API</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCENE 2: Admin Dashboard (/admin) (4.4s - 8.75s) -->
+      <section id="scene-2" class="clip" data-start="4.4" data-duration="4.35" data-track-index="0">
+        <div id="s2-stage" class="scene-stage">
+          <header class="app-topbar">
+            <div class="brand-lockup">
+              <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <path d="M2 3h20" />
+                <path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3" />
+                <path d="m7 21 5-5 5 5" />
+              </svg>
+              <span>Presentation Manager</span>
+            </div>
+            <div class="topbar-right">
+              <span class="route-chip">GET /admin</span>
+              <span class="btn-outline">Logout</span>
+            </div>
+          </header>
+
+          <div class="s2-body">
+            <div id="s2-heading" class="s2-header-row">
+              <div>
+                <h2 class="s2-h1">Presentations</h2>
+                <p class="s2-sub">Manage your HTML-based presentations</p>
+              </div>
+              <div class="route-chip">D1 + R2 Storage</div>
+            </div>
+
+            <div id="s2-card" class="dashboard-card">
+              <div class="search-bar">Search by name, slug, or protection status...</div>
+              <div class="table-header">
+                <span>Name ↕</span>
+                <span>Slug ↕</span>
+                <span>Uploaded ▼</span>
+                <span>Protection ↕</span>
+                <span style="text-align: right;">Actions</span>
+              </div>
+
+              <div id="s2-row-1" class="table-row">
+                <span class="row-name">Q4 Platform &amp; Architecture Roadmap</span>
+                <span class="row-slug">q4-product-roadmap</span>
+                <span class="row-date">Just now</span>
+                <span><span class="badge badge-public">Public</span></span>
+                <div class="row-actions">
+                  <span class="btn-outline">Manage</span>
+                  <span class="btn-outline">View</span>
+                </div>
+              </div>
+
+              <div id="s2-row-2" class="table-row">
+                <span class="row-name">Enterprise Strategy Deck</span>
+                <span class="row-slug">sample-deck</span>
+                <span class="row-date">Just now</span>
+                <span><span class="badge badge-protected">Protected</span></span>
+                <div class="row-actions">
+                  <span class="btn-outline">Manage</span>
+                  <span class="btn-outline">View</span>
+                </div>
+              </div>
+
+              <div id="s2-row-3" class="table-row">
+                <span class="row-name">Series B Investor Briefing</span>
+                <span class="row-slug">investor-briefing</span>
+                <span class="row-date">Just now</span>
+                <span><span class="badge badge-needs-pw">Needs password</span></span>
+                <div class="row-actions">
+                  <span class="btn-outline">Manage</span>
+                  <span class="btn-outline">View</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCENE 3: Presentation Detail & R2 File Manager (8.75s - 15.3s) -->
+      <section id="scene-3" class="clip" data-start="8.75" data-duration="6.55" data-track-index="0">
+        <div id="s3-stage" class="scene-stage">
+          <header class="app-topbar">
+            <div class="brand-lockup">
+              <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <path d="M2 3h20" />
+                <path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3" />
+                <path d="m7 21 5-5 5 5" />
+              </svg>
+              <span>Presentation Manager</span>
+            </div>
+            <div class="topbar-right">
+              <span class="route-chip">/admin/presentations/sample-deck</span>
+            </div>
+          </header>
+
+          <div class="s3-body">
+            <div class="s3-title-bar">
+              <div class="s3-title-left">
+                <span class="btn-outline">← Back</span>
+                <h2 class="s3-h1">Enterprise Strategy Deck</h2>
+              </div>
+              <span id="s3-status-badge" class="badge badge-protected">PBKDF2-SHA256 Protected</span>
+            </div>
+
+            <div class="s3-grid">
+              <!-- Left Column: Protection Settings -->
+              <div id="s3-left-card" class="ui-card">
+                <div>
+                  <div class="card-title-inline">
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="2.4">
+                      <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" />
+                    </svg>
+                    <span>Protection Settings</span>
+                  </div>
+                  <p class="card-desc">Configure HTTP Basic Auth for /content/sample-deck/</p>
+                </div>
+
+                <div class="field-group">
+                  <span class="field-label">Public username</span>
+                  <div class="field-input">sample-deck</div>
+                </div>
+
+                <div class="field-group">
+                  <span class="field-label">Visitor password</span>
+                  <div id="s3-pw-box" class="field-input">leverage-synergy-vector</div>
+                </div>
+
+                <div id="s3-gen-btn" class="btn-passphrase">✦ Generate passphrase</div>
+                <div class="btn-primary-dark">Save password</div>
+              </div>
+
+              <!-- Right Column: Presentation Files & File Upload -->
+              <div id="s3-right-card" class="ui-card">
+                <div>
+                  <div class="card-title-inline">
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" stroke-width="2.4">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="17 8 12 3 7 8" />
+                      <line x1="12" x2="12" y1="3" y2="15" />
+                    </svg>
+                    <span>File Upload &amp; R2 Objects</span>
+                  </div>
+                  <p class="card-desc">Objects stored under content/sample-deck/ in Cloudflare R2</p>
+                </div>
+
+                <div class="file-list">
+                  <div id="s3-file-1" class="file-row">
+                    <span class="file-name">index.html</span>
+                    <span class="file-size">74 B</span>
+                  </div>
+                  <div id="s3-file-2" class="file-row">
+                    <span class="file-name">assets/presentation-theme.css</span>
+                    <span class="file-size">2.5 KB</span>
+                  </div>
+                  <div id="s3-file-3" class="file-row">
+                    <span class="file-name">slides/executive-summary.pdf</span>
+                    <span class="file-size">16.4 KB</span>
+                  </div>
+                </div>
+
+                <div class="dropzone-box">
+                  <p class="dropzone-title">Drag &amp; drop files or folders here</p>
+                  <p class="dropzone-sub">Supports .html, assets, and .zip extraction</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <svg id="sim-cursor" viewBox="0 0 24 24" fill="#0f172a" stroke="#ffffff" stroke-width="2">
+            <path d="M4 4l7.07 17 2.51-7.39L21 11.07z" />
+          </svg>
+        </div>
+      </section>
+
+      <!-- SCENE 4: Edge Viewer, Skill API & Outro Lockup (15.3s - 20.0s) -->
+      <section id="scene-4" class="clip" data-start="15.3" data-duration="4.7" data-track-index="0">
+        <div id="s4-stage" class="scene-stage">
+          <header class="app-topbar">
+            <div class="brand-lockup">
+              <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <path d="M2 3h20" />
+                <path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3" />
+                <path d="m7 21 5-5 5 5" />
+              </svg>
+              <span>Presentation Manager</span>
+            </div>
+            <div class="topbar-right">
+              <span class="route-chip">White-Label Cloudflare Worker</span>
+            </div>
+          </header>
+
+          <div class="s4-body">
+            <div class="pillar-grid">
+              <div id="s4-pillar-1" class="pillar-card">
+                <span class="pillar-route">GET /content/{slug}/*</span>
+                <h3 class="pillar-title">R2 Edge Viewer</h3>
+                <p class="pillar-desc">Streams HTML decks &amp; assets from R2 with per-deck Basic Auth and X-Frame-Options: SAMEORIGIN.</p>
+              </div>
+              <div id="s4-pillar-2" class="pillar-card">
+                <span class="pillar-route">GET /admin</span>
+                <h3 class="pillar-title">Astro SSR Admin</h3>
+                <p class="pillar-desc">KV-backed sessions, CSRF guards, client-side ZIP extraction, and X-Frame-Options: DENY.</p>
+              </div>
+              <div id="s4-pillar-3" class="pillar-card">
+                <span class="pillar-route">POST /admin/api/v1/skill/*</span>
+                <h3 class="pillar-title">Agent Skill API</h3>
+                <p class="pillar-desc">Bearer-authenticated endpoints to publish and update presentation ZIPs from AI coding agents.</p>
+              </div>
+            </div>
+
+            <div id="s4-outro" class="outro-lockup">
+              <div>
+                <h2 class="outro-title">Presentation Manager</h2>
+                <p class="outro-tagline">Explore shared presentations and interactive decks. Zero hardcoded branding.</p>
+              </div>
+              <div class="outro-badge">wrangler deploy</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Audio Tracks -->
+      <audio
+        id="bg-music"
+        src="assets/music/happy-beats-business-moves-vol-12-by-ende-dot-app.mp3"
+        data-start="0"
+        data-duration="20"
+        data-track-index="10"
+        data-volume="0.34"
+      ></audio>
+      <audio
+        id="sfx-hero"
+        src="assets/sfx/impact/impactSoft_medium_001.ogg"
+        data-start="0.20"
+        data-track-index="11"
+        data-volume="0.72"
+      ></audio>
+      <audio
+        id="sfx-rows"
+        src="assets/sfx/casino/card-slide-1.ogg"
+        data-start="4.91"
+        data-track-index="12"
+        data-volume="0.68"
+      ></audio>
+      <audio
+        id="sfx-scene3"
+        src="assets/sfx/impact/impactSoft_medium_002.ogg"
+        data-start="8.74"
+        data-track-index="13"
+        data-volume="0.70"
+      ></audio>
+      <audio
+        id="sfx-click"
+        src="assets/sfx/interface/click_003.ogg"
+        data-start="10.93"
+        data-track-index="14"
+        data-volume="0.75"
+      ></audio>
+      <audio
+        id="sfx-outro"
+        src="assets/sfx/impact/impactBell_heavy_000.ogg"
+        data-start="17.47"
+        data-track-index="15"
+        data-volume="0.75"
+      ></audio>
+    </div>
+
+    <script>
+      const tl = gsap.timeline({ paused: true });
+
+      // Per-frame audio-reactive modulation of ambient background glows
+      if (window.AUDIO_DATA && Array.isArray(window.AUDIO_DATA.frames)) {
+        const fps = window.AUDIO_DATA.fps || 30;
+        const frames = window.AUDIO_DATA.frames;
+        for (let f = 0; f < frames.length; f++) {
+          const frame = frames[f];
+          tl.call(
+            function () {
+              const bass = frame.bands && frame.bands[0] ? frame.bands[0] : 0;
+              const mid = frame.bands && frame.bands[3] ? frame.bands[3] : 0;
+              gsap.set("#ambient-glow-1", { scale: 1 + bass * 0.14, x: mid * 18 });
+              gsap.set("#ambient-glow-2", { scale: 1 + mid * 0.12, y: -bass * 16 });
+            },
+            [],
+            f / fps
+          );
+        }
+      }
+
+      // SCENE 1 (0.0s - 4.4s): Public Homepage Hero
+      tl.fromTo(
+        "#s1-eyebrow",
+        { y: -24, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.42, ease: "power3.out" },
+        0.1
+      );
+      tl.fromTo(
+        "#s1-title",
+        { y: 40, scale: 0.96, opacity: 0 },
+        { y: 0, scale: 1, opacity: 1, duration: 0.5, ease: "power3.out" },
+        0.2
+      );
+      tl.fromTo(
+        "#s1-subtitle",
+        { y: 28, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.45, ease: "power2.out" },
+        0.55
+      );
+      tl.fromTo(
+        "#s1-pill-1",
+        { x: -32, opacity: 0 },
+        { x: 0, opacity: 1, duration: 0.42, ease: "back.out(1.4)" },
+        1.64
+      );
+      tl.fromTo(
+        "#s1-pill-2",
+        { x: 32, opacity: 0 },
+        { x: 0, opacity: 1, duration: 0.42, ease: "back.out(1.4)" },
+        2.19
+      );
+
+      // SCENE 2 (4.4s - 8.75s): Admin Dashboard & Sequential Beat-Grid Rows
+      tl.fromTo(
+        "#s2-heading",
+        { y: -20, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.35, ease: "power2.out" },
+        4.45
+      );
+      tl.fromTo(
+        "#s2-card",
+        { y: 24, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.38, ease: "power2.out" },
+        4.55
+      );
+      // beat-grid: row 1 at 4.91s, row 2 at 5.45s, row 3 at 6.00s
+      tl.fromTo(
+        "#s2-row-1",
+        { x: -36, opacity: 0 },
+        { x: 0, opacity: 1, duration: 0.38, ease: "power3.out" },
+        4.91
+      );
+      tl.fromTo(
+        "#s2-row-2",
+        { x: -36, opacity: 0 },
+        { x: 0, opacity: 1, duration: 0.38, ease: "power3.out" },
+        5.45
+      );
+      tl.fromTo(
+        "#s2-row-3",
+        { x: -36, opacity: 0 },
+        { x: 0, opacity: 1, duration: 0.38, ease: "power3.out" },
+        6.0
+      );
+
+      // SCENE 3 (8.75s - 15.3s): Protection Settings & R2 File Manager
+      // beat-locked: 8.74s
+      tl.fromTo(
+        "#s3-left-card",
+        { x: -40, opacity: 0 },
+        { x: 0, opacity: 1, duration: 0.45, ease: "power3.out" },
+        8.8
+      );
+      tl.fromTo(
+        "#s3-right-card",
+        { x: 40, opacity: 0 },
+        { x: 0, opacity: 1, duration: 0.45, ease: "power3.out" },
+        8.95
+      );
+      tl.fromTo(
+        "#s3-file-1",
+        { y: 18, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.32, ease: "power2.out" },
+        9.45
+      );
+      tl.fromTo(
+        "#s3-file-2",
+        { y: 18, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.32, ease: "power2.out" },
+        9.83
+      );
+      tl.fromTo(
+        "#s3-file-3",
+        { y: 18, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.32, ease: "power2.out" },
+        10.2
+      );
+
+      // Simulated cursor move + click on "Generate passphrase" at strong cue 10.93s
+      // beat-locked: 10.93s
+      tl.fromTo(
+        "#sim-cursor",
+        { x: 220, y: 180, opacity: 0 },
+        { x: 0, y: 0, opacity: 1, duration: 0.65, ease: "power2.inOut" },
+        10.25
+      );
+      tl.to(
+        "#s3-gen-btn",
+        { scale: 0.96, duration: 0.1, ease: "power2.in" },
+        10.93
+      );
+      tl.to(
+        "#s3-gen-btn",
+        { scale: 1, duration: 0.18, ease: "back.out(2)", immediateRender: false },
+        11.03
+      );
+      tl.fromTo(
+        "#s3-pw-box",
+        { scale: 0.98 },
+        { scale: 1.03, duration: 0.18, ease: "power2.out" },
+        11.03
+      );
+      tl.to(
+        "#s3-pw-box",
+        { scale: 1, duration: 0.2, ease: "power2.inOut", immediateRender: false },
+        11.21
+      );
+
+      // SCENE 4 (15.3s - 20.0s): Architecture Pillars & Final Lockup
+      tl.fromTo(
+        "#s4-pillar-1",
+        { y: 36, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.42, ease: "power3.out" },
+        15.45
+      );
+      tl.fromTo(
+        "#s4-pillar-2",
+        { y: 36, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.42, ease: "power3.out" },
+        15.95
+      );
+      tl.fromTo(
+        "#s4-pillar-3",
+        { y: 36, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.42, ease: "power3.out" },
+        16.45
+      );
+      // beat-locked: 17.47s
+      tl.fromTo(
+        "#s4-outro",
+        { y: 32, scale: 0.97, opacity: 0 },
+        { y: 0, scale: 1, opacity: 1, duration: 0.5, ease: "power3.out" },
+        17.35
+      );
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

@@ -39,4 +39,10 @@ test('AdminLayout, login, dashboard, and presentation detail pages use /admin/* 
 	);
 	assert.match(slugPage, /crossorigin="anonymous"/);
 	assert.match(slugPage, /referrerpolicy="no-referrer"/);
+	assert.doesNotMatch(login, /\bclassName="/);
+	assert.doesNotMatch(slugPage, /\bclassName="/);
+	assert.match(
+		slugPage,
+		/<CardTitle class="inline-flex w-full min-w-0 flex-row flex-nowrap items-center gap-2 text-lg">/
+	);
 });

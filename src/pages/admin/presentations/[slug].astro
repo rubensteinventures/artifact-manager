@@ -290,13 +290,13 @@ const files = objects.objects
 			<div class="md:col-span-1 space-y-6">
 				<Card>
 					<CardHeader>
-						<CardTitle className="inline-flex w-full min-w-0 flex-row flex-nowrap items-center gap-2 text-lg">
+						<CardTitle class="inline-flex w-full min-w-0 flex-row flex-nowrap items-center gap-2 text-lg">
 							<Shield class="w-5 h-5 shrink-0" aria-hidden="true" />
 							<span class="min-w-0 leading-snug">Protection Settings</span>
 						</CardTitle>
 						<CardDescription>Configure access for this presentation</CardDescription>
 					</CardHeader>
-					<CardContent className="space-y-6">
+					<CardContent class="space-y-6">
 						<form method="POST" class="space-y-4 pb-6">
 							<input type="hidden" name="action" value="update-protection" />
 							<div class="group space-y-2">
@@ -315,16 +315,16 @@ const files = objects.objects
 								/>
 							</div>
 							{usernameFormError && (
-								<Alert variant="destructive" className="text-sm">
+								<Alert variant="destructive" class="text-sm">
 									{usernameFormError}
 								</Alert>
 							)}
 							{!usernameStr && (
-								<Alert variant="info" className="text-xs bg-green-50 border-green-200 text-green-800">
+								<Alert variant="info" class="text-xs bg-green-50 border-green-200 text-green-800">
 									<Globe class="w-3 h-3 mr-2" /> This presentation is currently <strong>public</strong>.
 								</Alert>
 							)}
-							<Button type="submit" className="w-full">Save username</Button>
+							<Button type="submit" class="w-full">Save username</Button>
 						</form>
 
 						<div class="border-t border-slate-200 pt-6 space-y-3">
@@ -364,7 +364,7 @@ const files = objects.objects
 													minlength={VISITOR_PASSWORD_MIN_LENGTH}
 													placeholder={`At least ${VISITOR_PASSWORD_MIN_LENGTH} characters`}
 													required
-													className="pr-10"
+													class="pr-10"
 												/>
 												<button
 													type="button"
@@ -390,7 +390,7 @@ const files = objects.objects
 													minlength={VISITOR_PASSWORD_MIN_LENGTH}
 													placeholder="Repeat password"
 													required
-													className="pr-10"
+													class="pr-10"
 												/>
 												<button
 													type="button"
@@ -405,16 +405,16 @@ const files = objects.objects
 												</button>
 											</div>
 										</div>
-										<Button type="button" variant="outline" size="sm" id="generateVisitorPassphrase" className="w-full">
+										<Button type="button" variant="outline" size="sm" id="generateVisitorPassphrase" class="w-full">
 											<Sparkles class="w-4 h-4 mr-2" /> Generate passphrase
 										</Button>
 									</div>
 									{passwordFormError && (
-										<Alert variant="destructive" className="text-sm">
+										<Alert variant="destructive" class="text-sm">
 											{passwordFormError}
 										</Alert>
 									)}
-									<Button type="submit" variant={hasVisitorPassword ? 'outline' : 'default'} className="w-full">
+									<Button type="submit" variant={hasVisitorPassword ? 'outline' : 'default'} class="w-full">
 										Save password
 									</Button>
 								</form>
@@ -425,12 +425,12 @@ const files = objects.objects
 
 				<Card>
 					<CardHeader>
-						<CardTitle className="text-lg">Presentation details</CardTitle>
+						<CardTitle class="text-lg">Presentation details</CardTitle>
 						<CardDescription>
 							Change how this presentation appears in the dashboard. The slug may not be modified.
 						</CardDescription>
 					</CardHeader>
-					<CardContent className="space-y-6">
+					<CardContent class="space-y-6">
 						<form method="POST" class="space-y-4">
 							<input type="hidden" name="action" value="update-presentation-name" />
 							<div class="space-y-2">
@@ -438,11 +438,11 @@ const files = objects.objects
 								<Input id="pres_name" name="name" value={displayName} data-1p-ignore="true" />
 							</div>
 							{nameFormError && (
-								<Alert variant="destructive" className="text-sm">
+								<Alert variant="destructive" class="text-sm">
 									{nameFormError}
 								</Alert>
 							)}
-							<Button type="submit" className="w-full">Save display name</Button>
+							<Button type="submit" class="w-full">Save display name</Button>
 						</form>
 						<div class="space-y-2 border-t border-slate-100 pt-6">
 							<label for="pres_slug" class="text-sm font-medium">Slug</label>
@@ -451,7 +451,7 @@ const files = objects.objects
 								value={presentationSlug}
 								readOnly
 								disabled
-								className="bg-slate-50 text-slate-600"
+								class="bg-slate-50 text-slate-600"
 								aria-readonly="true"
 							/>
 							<p class="text-xs text-slate-500">
@@ -462,14 +462,14 @@ const files = objects.objects
 					</CardContent>
 				</Card>
 
-                <Card className="border-red-100">
+                <Card class="border-red-100">
                     <CardHeader>
-                        <CardTitle className="text-red-600 text-lg">Danger Zone</CardTitle>
+                        <CardTitle class="text-red-600 text-lg">Danger Zone</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <form method="POST" onsubmit="return confirm('Are you sure? This will delete all data and files stored for this presentation.')">
                             <input type="hidden" name="action" value="delete-presentation" />
-                            <Button variant="destructive" type="submit" className="w-full">
+                            <Button variant="destructive" type="submit" class="w-full">
                                 <Trash2 class="w-4 h-4 mr-2" /> Delete Presentation
                             </Button>
                         </form>
@@ -481,13 +481,13 @@ const files = objects.objects
 			<div class="md:col-span-2 space-y-6">
 				<Card>
 					<CardHeader>
-						<CardTitle className="text-lg">Presentation Files</CardTitle>
+						<CardTitle class="text-lg">Presentation Files</CardTitle>
 						<CardDescription>
 							Objects under <code class="font-mono">content/{slug}/</code>. Create folders, then upload into them using{' '}
 							<em>Upload into folder</em> below (or use <em>Browse folder</em> to keep nested paths).
 						</CardDescription>
 					</CardHeader>
-					<CardContent className="space-y-4">
+					<CardContent class="space-y-4">
 						<form method="POST" class="flex flex-col gap-3 sm:flex-row sm:items-end">
 							<input type="hidden" name="action" value="create-folder" />
 							<div class="flex-1 space-y-2 w-full">
@@ -499,22 +499,22 @@ const files = objects.objects
 									autocomplete="off"
 								/>
 							</div>
-							<Button type="submit" variant="outline" className="w-full sm:w-auto shrink-0">
+							<Button type="submit" variant="outline" class="w-full sm:w-auto shrink-0">
 								<Folder class="w-4 h-4 mr-2" /> Create folder
 							</Button>
 						</form>
 						{folderFormError && (
-							<Alert variant="destructive" className="text-sm">
+							<Alert variant="destructive" class="text-sm">
 								{folderFormError}
 							</Alert>
 						)}
 						{renameFormError && (
-							<Alert variant="destructive" className="text-sm">
+							<Alert variant="destructive" class="text-sm">
 								{renameFormError}
 							</Alert>
 						)}
 						{deleteFormError && (
-							<Alert variant="destructive" className="text-sm">
+							<Alert variant="destructive" class="text-sm">
 								{deleteFormError}
 							</Alert>
 						)}
@@ -523,15 +523,15 @@ const files = objects.objects
 						<Table>
 						<TableHeader>
 							<TableRow>
-								<TableHead className="pl-0">Name</TableHead>
+								<TableHead class="pl-0">Name</TableHead>
 								<TableHead>Size</TableHead>
-								<TableHead className="text-right pr-0">Actions</TableHead>
+								<TableHead class="text-right pr-0">Actions</TableHead>
 							</TableRow>
 						</TableHeader>
 						<TableBody>
 							{files.map((file, fileRowIdx) => (
 								<TableRow key={file.key}>
-									<TableCell className="font-mono text-xs pl-0">
+									<TableCell class="font-mono text-xs pl-0">
 										<span class="inline-flex items-center gap-2">
 											{file.isFolder ? (
 												<Folder class="w-3 h-3 text-amber-600 shrink-0" />
@@ -541,10 +541,10 @@ const files = objects.objects
 											{file.name}
 										</span>
 									</TableCell>
-									<TableCell className="text-xs text-slate-500">
+									<TableCell class="text-xs text-slate-500">
 										{file.isFolder ? '—' : formatFileSize(file.size)}
 									</TableCell>
-									<TableCell className="text-right pr-0">
+									<TableCell class="text-right pr-0">
 										<div class="flex flex-col items-end gap-2">
 											{!file.isFolder ? (
 												<div
@@ -561,11 +561,11 @@ const files = objects.objects
 															name="new_relative_path"
 															value={file.name}
 															size="sm"
-															className="font-mono text-xs h-8 min-w-0 flex-1"
+															class="font-mono text-xs h-8 min-w-0 flex-1"
 															autocomplete="off"
 															aria-label={`New path for ${file.name}`}
 														/>
-														<Button type="submit" variant="outline" size="sm" className="h-8 shrink-0">
+														<Button type="submit" variant="outline" size="sm" class="h-8 shrink-0">
 															Rename
 														</Button>
 													</form>
@@ -601,7 +601,7 @@ const files = objects.objects
 														variant="ghost"
 														size="icon"
 														type="submit"
-														className="text-red-500 hover:text-red-700 h-8 w-8"
+														class="text-red-500 hover:text-red-700 h-8 w-8"
 														aria-label={file.isFolder ? `Delete folder ${file.name}` : `Delete ${file.name}`}
 													>
 														<Trash2 class="w-4 h-4" />
@@ -614,7 +614,7 @@ const files = objects.objects
 							))}
 							{files.length === 0 && (
 								<TableRow>
-									<TableCell colspan={3} className="text-center py-8 text-slate-400 italic">
+									<TableCell colspan={3} class="text-center py-8 text-slate-400 italic">
 										No files yet.
 									</TableCell>
 								</TableRow>
@@ -626,7 +626,7 @@ const files = objects.objects
 
 				<Card>
 					<CardHeader>
-						<CardTitle className="inline-flex w-full min-w-0 flex-row flex-nowrap items-center gap-2 text-lg">
+						<CardTitle class="inline-flex w-full min-w-0 flex-row flex-nowrap items-center gap-2 text-lg">
 							<Upload class="w-5 h-5 shrink-0" aria-hidden="true" />
 							<span class="min-w-0 leading-snug">File Upload</span>
 						</CardTitle>
@@ -635,7 +635,7 @@ const files = objects.objects
 							prefixes every object key; <strong>Browse folder</strong> keeps each file’s path under that prefix.
 						</CardDescription>
 					</CardHeader>
-					<CardContent className="space-y-4">
+					<CardContent class="space-y-4">
 						<div class="space-y-2">
 							<label for="uploadDestination" class="text-sm font-medium">Upload into folder (optional)</label>
 							<Input

@@ -8,7 +8,7 @@ import { Alert } from '@/components/starwind/alert/index.ts';
 import {
 	getClientIp,
 	checkLoginRateLimit,
-	verifyAdminCredentials,
+	authenticateAdminLogin,
 	recordFailedLoginAttempt,
 	clearLoginRateLimit,
 } from '@/lib/admin-auth';
@@ -29,21 +29,12 @@ if (Astro.request.method === 'POST') {
 		const username = typeof usernameRaw === 'string' ? usernameRaw.trim() : '';
 		const password = typeof passwordRaw === 'string' ? passwordRaw : '';
 
-		const db = env.DB;
-		const admin =
-			username.length > 0
-				? await db
-						.prepare('SELECT username, password_hash FROM admins WHERE username = ?')
-						.bind(username)
-						.first()
-				: null;
-
-		// D1 returns snake_case columns; tolerate odd casings from tooling.
-		const row = admin as Record<string, unknown> | null;
-		const hash = row && (row.password_hash ?? row.PASSWORD_HASH);
-		const hashStr = typeof hash === 'string' ? hash : null;
-
-		const ok = await verifyAdminCredentials(username, password, hashStr);
+		const ok = await authenticateAdminLogin(
+			env.DB,
+			username,
+			password,
+			env as unknown as Record<string, unknown>
+		);
 
 		if (ok) {
 			await clearLoginRateLimit(env.SESSION, clientIp);

@@ -1,12 +1,16 @@
 import { env } from 'cloudflare:workers';
 import { defineMiddleware } from 'astro:middleware';
-import { applyAdminSecurityHeaders, isBlockedCrossSiteMutation } from '@/lib/admin-auth';
+import {
+	applyAdminSecurityHeaders,
+	ensureAdminInitialized,
+	isBlockedCrossSiteMutation,
+} from '@/lib/admin-auth';
 import { applyViewerSecurityHeaders, handleContentRequest } from '@/lib/content-viewer';
 
 /**
  * Unified request middleware:
  * - `/content/*` streams presentation files from R2 with optional per-presentation D1 Basic Auth (`X-Frame-Options: SAMEORIGIN`).
- * - `/admin` and `/admin/*` enforce CSRF checks, `X-Frame-Options: DENY`, and KV-backed admin sessions.
+ * - `/admin` and `/admin/*` enforce CSRF checks, `X-Frame-Options: DENY`, first-run `/admin/setup` routing, and KV-backed admin sessions.
  * - `/` and public assets pass through with `X-Frame-Options: SAMEORIGIN`.
  */
 export const onRequest = defineMiddleware(async (context, next) => {
@@ -35,7 +39,27 @@ export const onRequest = defineMiddleware(async (context, next) => {
 			return applyAdminSecurityHeaders(await next());
 		}
 
+		const { initialized } = await ensureAdminInitialized(
+			env.DB,
+			env as unknown as Record<string, unknown>
+		);
+
+		if (!initialized) {
+			if (normalizedPath !== '/admin/setup') {
+				return applyAdminSecurityHeaders(context.redirect('/admin/setup'));
+			}
+			return applyAdminSecurityHeaders(await next());
+		}
+
 		const adminUsername = await context.session?.get('adminUsername');
+
+		if (normalizedPath === '/admin/setup') {
+			return applyAdminSecurityHeaders(
+				context.redirect(
+					adminUsername && typeof adminUsername === 'string' ? '/admin' : '/admin/login'
+				)
+			);
+		}
 
 		if (
 			(!adminUsername || typeof adminUsername !== 'string') &&

@@ -14,6 +14,14 @@ test('AdminLayout, login, dashboard, and presentation detail pages use /admin/* 
 
 	const login = fs.readFileSync(path.join(rootDir, 'src/pages/admin/login.astro'), 'utf8');
 	assert.match(login, /Astro\.redirect\('\/admin'\)/);
+	assert.match(login, /authenticateAdminLogin/);
+
+	const setup = fs.readFileSync(path.join(rootDir, 'src/pages/admin/setup.astro'), 'utf8');
+	assert.match(setup, /ensureAdminInitialized/);
+	assert.match(setup, /createInitialAdmin/);
+	assert.match(setup, /Astro\.redirect\('\/admin'\)/);
+	assert.match(setup, /Astro\.redirect\('\/admin\/login'\)/);
+	assert.doesNotMatch(setup, /\bclassName="/);
 
 	const dashboard = fs.readFileSync(path.join(rootDir, 'src/pages/admin/index.astro'), 'utf8');
 	assert.match(dashboard, /Astro\.redirect\(`\/admin\/presentations\/\$\{slugCheck\.slug\}`\)/);

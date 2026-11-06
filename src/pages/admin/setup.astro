@@ -1,0 +1,148 @@
+---
+import { env } from 'cloudflare:workers';
+import Layout from '@/layouts/AdminLayout.astro';
+import {
+	Card,
+	CardContent,
+	CardHeader,
+	CardTitle,
+	CardDescription,
+} from '@/components/starwind/card/index.ts';
+import { Input } from '@/components/starwind/input/index.ts';
+import { Button } from '@/components/starwind/button/index.ts';
+import { Alert } from '@/components/starwind/alert/index.ts';
+import {
+	getClientIp,
+	checkLoginRateLimit,
+	recordFailedLoginAttempt,
+	clearLoginRateLimit,
+	ensureAdminInitialized,
+	createInitialAdmin,
+} from '@/lib/admin-auth';
+
+const envRecord = env as unknown as Record<string, unknown>;
+const { initialized } = await ensureAdminInitialized(env.DB, envRecord);
+
+if (initialized) {
+	return Astro.redirect('/admin/login');
+}
+
+let error = '';
+let submittedUsername = '';
+
+if (Astro.request.method === 'POST') {
+	const clientIp = getClientIp(Astro.request);
+	const isRateLimited = await checkLoginRateLimit(env.SESSION, clientIp);
+
+	if (isRateLimited) {
+		Astro.response.status = 429;
+		error = 'Too many setup attempts. Please wait a minute and try again.';
+	} else {
+		const formData = await Astro.request.formData();
+		const usernameRaw = formData.get('username');
+		const passwordRaw = formData.get('password');
+		const confirmPasswordRaw = formData.get('confirm_password');
+
+		const username = typeof usernameRaw === 'string' ? usernameRaw.trim() : '';
+		const password = typeof passwordRaw === 'string' ? passwordRaw : '';
+		const confirmPassword =
+			typeof confirmPasswordRaw === 'string' ? confirmPasswordRaw : '';
+		submittedUsername = username;
+
+		const result = await createInitialAdmin(
+			env.DB,
+			{ username, password, confirmPassword },
+			envRecord
+		);
+
+		if (result.ok) {
+			await clearLoginRateLimit(env.SESSION, clientIp);
+			await Astro.session?.regenerate();
+			Astro.session?.set('adminUsername', result.username);
+			return Astro.redirect('/admin');
+		}
+
+		if (result.alreadyInitialized) {
+			return Astro.redirect('/admin/login');
+		}
+
+		await recordFailedLoginAttempt(env.SESSION, clientIp);
+		error = result.error;
+	}
+}
+---
+
+<Layout title="Initial Admin Setup">
+	<div class="flex justify-center items-center py-20">
+		<Card class="w-full max-w-md shadow-lg border-slate-200">
+			<CardHeader class="space-y-1">
+				<CardTitle class="text-2xl text-center">Initial Admin Setup</CardTitle>
+				<CardDescription class="text-center">
+					Create your administrator account to finish setting up this deployment. This page locks permanently once an administrator is created.
+				</CardDescription>
+			</CardHeader>
+			<CardContent>
+				<form method="POST" class="space-y-4">
+					<div class="space-y-2">
+						<label
+							for="username"
+							class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+						>
+							Admin Username
+						</label>
+						<Input
+							id="username"
+							name="username"
+							type="text"
+							value={submittedUsername || 'admin'}
+							required
+							autocomplete="username"
+						/>
+					</div>
+					<div class="space-y-2">
+						<label
+							for="password"
+							class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+						>
+							Password (at least 8 characters)
+						</label>
+						<Input
+							id="password"
+							name="password"
+							type="password"
+							minlength={8}
+							maxlength={128}
+							required
+							autocomplete="new-password"
+						/>
+					</div>
+					<div class="space-y-2">
+						<label
+							for="confirm_password"
+							class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+						>
+							Confirm Password
+						</label>
+						<Input
+							id="confirm_password"
+							name="confirm_password"
+							type="password"
+							minlength={8}
+							maxlength={128}
+							required
+							autocomplete="new-password"
+						/>
+					</div>
+					{error && (
+						<Alert variant="destructive" class="mt-4">
+							{error}
+						</Alert>
+					)}
+					<Button type="submit" class="w-full mt-6" size="lg">
+						Create Admin Account
+					</Button>
+				</form>
+			</CardContent>
+		</Card>
+	</div>
+</Layout>

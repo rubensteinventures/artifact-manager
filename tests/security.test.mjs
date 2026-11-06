@@ -61,6 +61,8 @@ test('isBlockedCrossSiteMutation blocks cross-site and sibling-subdomain mutatio
 	assert.equal(isBlockedCrossSiteMutation('POST', '/admin/api/upload/q1', 'same-site'), true);
 	assert.equal(isBlockedCrossSiteMutation('POST', '/admin/api/logout', 'cross-site'), true);
 	assert.equal(isBlockedCrossSiteMutation('POST', '/admin/logout', 'cross-site'), true);
+	assert.equal(isBlockedCrossSiteMutation('POST', '/admin/setup', 'cross-site'), true);
+	assert.equal(isBlockedCrossSiteMutation('POST', '/admin/setup', 'same-site'), true);
 
 	assert.equal(isBlockedCrossSiteMutation('POST', '/admin/presentations/q1', 'same-origin'), false);
 	assert.equal(isBlockedCrossSiteMutation('POST', '/admin/presentations/q1', 'none'), false);
@@ -105,6 +107,8 @@ test('middleware.ts routes /content/* to content-viewer with SAMEORIGIN and gate
 	assert.match(middlewareSrc, /handleContentRequest/);
 	assert.match(middlewareSrc, /applyViewerSecurityHeaders/);
 	assert.match(middlewareSrc, /applyAdminSecurityHeaders/);
+	assert.match(middlewareSrc, /ensureAdminInitialized/);
+	assert.match(middlewareSrc, /\/admin\/setup/);
 	assert.match(middlewareSrc, /\/admin\/login/);
 	assert.match(middlewareSrc, /\/admin\/api\//);
 

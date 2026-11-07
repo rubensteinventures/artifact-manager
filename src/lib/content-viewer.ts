@@ -1,4 +1,4 @@
-import { getBrandingConfig, renderAccessDeniedHtml } from './branding.ts';
+import { loadBrandingConfig, renderAccessDeniedHtml } from './branding.ts';
 import {
 	parseBasicAuth,
 	timingSafeEqualStrings,
@@ -90,7 +90,7 @@ export async function handleContentRequest(
 		return new Response('Invalid path', { status: 400 });
 	}
 
-	const branding = getBrandingConfig(env, url);
+	const branding = await loadBrandingConfig(env, url);
 	const accessDeniedHtml = renderAccessDeniedHtml(branding);
 
 	let presentation: { username: string | null; password: string | null } | null = null;

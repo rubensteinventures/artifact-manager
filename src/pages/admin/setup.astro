@@ -17,18 +17,35 @@ import {
 	recordFailedLoginAttempt,
 	clearLoginRateLimit,
 	ensureAdminInitialized,
+	validateAdminSetupInput,
 	createInitialAdmin,
 } from '@/lib/admin-auth';
+import {
+	loadBrandingConfig,
+	saveBrandingSettings,
+	DEFAULT_FAVICON_URL,
+} from '@/lib/branding';
 
-const envRecord = env as unknown as Record<string, unknown>;
+const envRecord = env as unknown as Record<string, unknown> & { DB?: D1Database };
 const { initialized } = await ensureAdminInitialized(env.DB, envRecord);
 
 if (initialized) {
 	return Astro.redirect('/admin/login');
 }
 
+const initialBranding = await loadBrandingConfig(envRecord, Astro.url);
+
 let error = '';
-let submittedUsername = '';
+let submittedUsername = 'admin';
+let submittedAppName = initialBranding.appName;
+let submittedOrgName = initialBranding.orgName;
+let submittedOrgUrl = initialBranding.orgUrl ?? '';
+let submittedHeroTitle = initialBranding.heroTitle;
+let submittedHeroSubtitle = initialBranding.heroSubtitle;
+let submittedPublicBaseUrl = initialBranding.configuredPublicContentBaseUrl ?? '';
+let submittedLogoUrl = initialBranding.logoUrl ?? '';
+let submittedFaviconUrl =
+	initialBranding.faviconUrl !== DEFAULT_FAVICON_URL ? initialBranding.faviconUrl : '';
 
 if (Astro.request.method === 'POST') {
 	const clientIp = getClientIp(Astro.request);
@@ -49,97 +66,280 @@ if (Astro.request.method === 'POST') {
 			typeof confirmPasswordRaw === 'string' ? confirmPasswordRaw : '';
 		submittedUsername = username;
 
-		const result = await createInitialAdmin(
-			env.DB,
-			{ username, password, confirmPassword },
-			envRecord
+		submittedAppName =
+			typeof formData.get('app_name') === 'string'
+				? String(formData.get('app_name')).trim()
+				: submittedAppName;
+		submittedOrgName =
+			typeof formData.get('org_name') === 'string'
+				? String(formData.get('org_name')).trim()
+				: submittedOrgName;
+		submittedOrgUrl =
+			typeof formData.get('org_url') === 'string'
+				? String(formData.get('org_url')).trim()
+				: '';
+		submittedHeroTitle =
+			typeof formData.get('hero_title') === 'string'
+				? String(formData.get('hero_title')).trim()
+				: submittedHeroTitle;
+		submittedHeroSubtitle =
+			typeof formData.get('hero_subtitle') === 'string'
+				? String(formData.get('hero_subtitle')).trim()
+				: submittedHeroSubtitle;
+		submittedPublicBaseUrl =
+			typeof formData.get('public_content_base_url') === 'string'
+				? String(formData.get('public_content_base_url')).trim()
+				: '';
+		submittedLogoUrl =
+			typeof formData.get('logo_url') === 'string'
+				? String(formData.get('logo_url')).trim()
+				: '';
+		submittedFaviconUrl =
+			typeof formData.get('favicon_url') === 'string'
+				? String(formData.get('favicon_url')).trim()
+				: '';
+
+		const adminValidation = validateAdminSetupInput(
+			username,
+			password,
+			confirmPassword
 		);
 
-		if (result.ok) {
-			await clearLoginRateLimit(env.SESSION, clientIp);
-			await Astro.session?.regenerate();
-			Astro.session?.set('adminUsername', result.username);
-			return Astro.redirect('/admin');
-		}
+		if (!adminValidation.ok) {
+			await recordFailedLoginAttempt(env.SESSION, clientIp);
+			error = adminValidation.error;
+		} else {
+			const brandingResult = await saveBrandingSettings(
+				env.DB,
+				env.BUCKET,
+				formData
+			);
 
-		if (result.alreadyInitialized) {
-			return Astro.redirect('/admin/login');
-		}
+			if (!brandingResult.ok) {
+				error = brandingResult.error;
+			} else {
+				const result = await createInitialAdmin(
+					env.DB,
+					{ username, password, confirmPassword },
+					envRecord
+				);
 
-		await recordFailedLoginAttempt(env.SESSION, clientIp);
-		error = result.error;
+				if (result.ok) {
+					await clearLoginRateLimit(env.SESSION, clientIp);
+					await Astro.session?.regenerate();
+					Astro.session?.set('adminUsername', result.username);
+					return Astro.redirect('/admin');
+				}
+
+				if (result.alreadyInitialized) {
+					return Astro.redirect('/admin/login');
+				}
+
+				await recordFailedLoginAttempt(env.SESSION, clientIp);
+				error = result.error;
+			}
+		}
 	}
 }
 ---
 
 <Layout title="Initial Admin Setup">
-	<div class="flex justify-center items-center py-20">
-		<Card class="w-full max-w-md shadow-lg border-slate-200">
+	<div class="flex justify-center items-center py-10">
+		<Card class="w-full max-w-2xl shadow-lg border-slate-200">
 			<CardHeader class="space-y-1">
-				<CardTitle class="text-2xl text-center">Initial Admin Setup</CardTitle>
+				<CardTitle class="text-2xl text-center">Initial Setup</CardTitle>
 				<CardDescription class="text-center">
-					Create your administrator account to finish setting up this deployment. This page locks permanently once an administrator is created.
+					Create your administrator account and configure your project branding. You can update all branding settings anytime later at <code class="font-mono">/admin/settings</code>.
 				</CardDescription>
 			</CardHeader>
 			<CardContent>
-				<form method="POST" class="space-y-4">
-					<div class="space-y-2">
-						<label
-							for="username"
-							class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-						>
-							Admin Username
-						</label>
-						<Input
-							id="username"
-							name="username"
-							type="text"
-							value={submittedUsername || 'admin'}
-							required
-							autocomplete="username"
-						/>
+				<form method="POST" enctype="multipart/form-data" class="space-y-6">
+					<div class="space-y-4">
+						<h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-200 pb-2">
+							1. Administrator Account
+						</h2>
+						<div class="space-y-2">
+							<label for="username" class="text-sm font-medium leading-none">
+								Admin Username
+							</label>
+							<Input
+								id="username"
+								name="username"
+								type="text"
+								value={submittedUsername || 'admin'}
+								required
+								autocomplete="username"
+							/>
+						</div>
+						<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+							<div class="space-y-2">
+								<label for="password" class="text-sm font-medium leading-none">
+									Password (at least 8 characters)
+								</label>
+								<Input
+									id="password"
+									name="password"
+									type="password"
+									minlength={8}
+									maxlength={128}
+									required
+									autocomplete="new-password"
+								/>
+							</div>
+							<div class="space-y-2">
+								<label for="confirm_password" class="text-sm font-medium leading-none">
+									Confirm Password
+								</label>
+								<Input
+									id="confirm_password"
+									name="confirm_password"
+									type="password"
+									minlength={8}
+									maxlength={128}
+									required
+									autocomplete="new-password"
+								/>
+							</div>
+						</div>
 					</div>
-					<div class="space-y-2">
-						<label
-							for="password"
-							class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-						>
-							Password (at least 8 characters)
-						</label>
-						<Input
-							id="password"
-							name="password"
-							type="password"
-							minlength={8}
-							maxlength={128}
-							required
-							autocomplete="new-password"
-						/>
+
+					<div class="space-y-4 pt-2">
+						<h2 class="text-sm font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-200 pb-2">
+							2. Branding & Appearance (Optional)
+						</h2>
+						<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+							<div class="space-y-2">
+								<label for="app_name" class="text-sm font-medium leading-none">
+									Application Name
+								</label>
+								<Input
+									id="app_name"
+									name="app_name"
+									type="text"
+									value={submittedAppName}
+									placeholder="Presentation Manager"
+								/>
+							</div>
+							<div class="space-y-2">
+								<label for="org_name" class="text-sm font-medium leading-none">
+									Organization Name
+								</label>
+								<Input
+									id="org_name"
+									name="org_name"
+									type="text"
+									value={submittedOrgName}
+									placeholder="Defaults to Application Name"
+								/>
+							</div>
+						</div>
+
+						<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+							<div class="space-y-2">
+								<label for="org_url" class="text-sm font-medium leading-none">
+									Organization Website URL
+								</label>
+								<Input
+									id="org_url"
+									name="org_url"
+									type="url"
+									value={submittedOrgUrl}
+									placeholder="https://example.com"
+								/>
+							</div>
+							<div class="space-y-2">
+								<label for="public_content_base_url" class="text-sm font-medium leading-none">
+									Public Content Base URL
+								</label>
+								<Input
+									id="public_content_base_url"
+									name="public_content_base_url"
+									type="url"
+									value={submittedPublicBaseUrl}
+									placeholder="Leave empty to use this Worker's origin"
+								/>
+							</div>
+						</div>
+
+						<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+							<div class="space-y-2">
+								<label for="hero_title" class="text-sm font-medium leading-none">
+									Landing Page Hero Title
+								</label>
+								<Input
+									id="hero_title"
+									name="hero_title"
+									type="text"
+									value={submittedHeroTitle}
+									placeholder="Interactive Presentations"
+								/>
+							</div>
+							<div class="space-y-2">
+								<label for="hero_subtitle" class="text-sm font-medium leading-none">
+									Landing Page Hero Subtitle
+								</label>
+								<Input
+									id="hero_subtitle"
+									name="hero_subtitle"
+									type="text"
+									value={submittedHeroSubtitle}
+									placeholder="Explore shared presentations and interactive decks."
+								/>
+							</div>
+						</div>
+
+						<div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+							<div class="space-y-2 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+								<label for="logo_file" class="text-sm font-medium leading-none">
+									Custom Logo (Upload or URL)
+								</label>
+								<input
+									id="logo_file"
+									name="logo_file"
+									type="file"
+									accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,image/x-icon"
+									class="block w-full text-xs text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-200 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-slate-800 hover:file:bg-slate-300"
+								/>
+								<Input
+									id="logo_url"
+									name="logo_url"
+									type="text"
+									value={submittedLogoUrl}
+									placeholder="Or external/relative logo URL"
+								/>
+								<p class="text-xs text-slate-500">PNG, JPG, WebP, GIF, SVG, or ICO (max 2 MB).</p>
+							</div>
+
+							<div class="space-y-2 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+								<label for="favicon_file" class="text-sm font-medium leading-none">
+									Custom Favicon (Upload or URL)
+								</label>
+								<input
+									id="favicon_file"
+									name="favicon_file"
+									type="file"
+									accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,image/x-icon,image/vnd.microsoft.icon"
+									class="block w-full text-xs text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-200 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-slate-800 hover:file:bg-slate-300"
+								/>
+								<Input
+									id="favicon_url"
+									name="favicon_url"
+									type="text"
+									value={submittedFaviconUrl}
+									placeholder="Or external/relative favicon URL"
+								/>
+								<p class="text-xs text-slate-500">Defaults to <code class="font-mono">/favicon.svg</code> if unset.</p>
+							</div>
+						</div>
 					</div>
-					<div class="space-y-2">
-						<label
-							for="confirm_password"
-							class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-						>
-							Confirm Password
-						</label>
-						<Input
-							id="confirm_password"
-							name="confirm_password"
-							type="password"
-							minlength={8}
-							maxlength={128}
-							required
-							autocomplete="new-password"
-						/>
-					</div>
+
 					{error && (
 						<Alert variant="destructive" class="mt-4">
 							{error}
 						</Alert>
 					)}
-					<Button type="submit" class="w-full mt-6" size="lg">
-						Create Admin Account
+					<Button type="submit" class="w-full mt-4" size="lg">
+						Complete Initial Setup
 					</Button>
 				</form>
 			</CardContent>

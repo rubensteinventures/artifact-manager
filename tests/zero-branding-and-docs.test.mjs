@@ -71,6 +71,7 @@ test('README.md documents new Cloudflare account setup, branding variables, and 
 		/https:\/\/deploy\.workers\.cloudflare\.com\/\?url=https:\/\/github\.com\/rubensteinventures\/artifact-manager/
 	);
 	assert.match(readme, /\/admin\/setup/);
+	assert.match(readme, /\/admin\/settings/);
 	assert.match(readme, /ADMIN_USERNAME/);
 	assert.match(readme, /ADMIN_PASSWORD/);
 	assert.match(readme, /wrangler d1 create/);
@@ -80,6 +81,7 @@ test('README.md documents new Cloudflare account setup, branding variables, and 
 	assert.match(readme, /APP_NAME/);
 	assert.match(readme, /ORG_NAME/);
 	assert.match(readme, /LOGO_URL/);
+	assert.match(readme, /FAVICON_URL/);
 	assert.match(readme, /PUBLIC_CONTENT_BASE_URL/);
 	assert.match(readme, /\/admin\/api\/v1\/skill\/presentations/);
 	assert.match(readme, /<BASE64_ENCODED_FILE_CONTENT>/);

@@ -3,8 +3,8 @@ import { env } from 'cloudflare:workers';
 import '../styles/global.css';
 import '../styles/starwind.css';
 import { Button } from '@/components/starwind/button/index.ts';
-import { Projector } from 'lucide-astro';
-import { getBrandingConfig } from '@/lib/branding';
+import { Projector, Settings } from 'lucide-astro';
+import { loadBrandingConfig } from '@/lib/branding';
 
 interface Props {
 	title: string;
@@ -13,8 +13,8 @@ interface Props {
 const { title } = Astro.props;
 // Auth redirects run in src/middleware.ts so they happen before streaming starts.
 const user = await Astro.session?.get('adminUsername');
-const branding = getBrandingConfig(
-	env as unknown as Record<string, unknown>,
+const branding = await loadBrandingConfig(
+	env as unknown as Record<string, unknown> & { DB?: D1Database },
 	Astro.url
 );
 ---
@@ -24,8 +24,8 @@ const branding = getBrandingConfig(
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<link rel="apple-touch-icon" href="/favicon.svg" />
+		<link rel="icon" href={branding.faviconUrl} />
+		<link rel="apple-touch-icon" href={branding.faviconUrl} />
 		<meta name="theme-color" content="#f8fafc" />
 		<meta name="generator" content={Astro.generator} />
 		<title>{title} | {branding.appName}</title>
@@ -41,8 +41,13 @@ const branding = getBrandingConfig(
 				<span>{branding.appName}</span>
 			</a>
 			{user && (
-				<div class="flex items-center gap-4">
-					<span class="text-sm text-slate-600">Admin</span>
+				<div class="flex items-center gap-3">
+					<a href="/admin/settings">
+						<Button variant="ghost" size="sm" type="button">
+							<Settings class="w-4 h-4 mr-1.5" /> Settings
+						</Button>
+					</a>
+					<span class="text-sm text-slate-600 hidden sm:inline">{user}</span>
 					<form action="/admin/api/logout" method="POST">
 						<Button variant="outline" size="sm" type="submit">Logout</Button>
 					</form>

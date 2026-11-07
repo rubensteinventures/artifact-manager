@@ -10,7 +10,7 @@ import {
 import { deleteAllUnderContentPrefix } from '@/lib/presentation-r2';
 import { normalizeContentRelativePath, isValidPresentationObjectKey } from '@/lib/r2-path';
 import { validatePublicUsername, isAllowedSlugParam } from '@/lib/slug-username';
-import { getBrandingConfig } from '@/lib/branding';
+import { loadBrandingConfig } from '@/lib/branding';
 import Layout from '@/layouts/AdminLayout.astro';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/starwind/card/index.ts';
 import { Button } from '@/components/starwind/button/index.ts';
@@ -37,8 +37,8 @@ import {
 const { slug } = Astro.params;
 const db = env.DB;
 const bucket = env.BUCKET;
-const branding = getBrandingConfig(
-	env as unknown as Record<string, unknown>,
+const branding = await loadBrandingConfig(
+	env as unknown as Record<string, unknown> & { DB?: D1Database },
 	Astro.url
 );
 

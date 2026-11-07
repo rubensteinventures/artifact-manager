@@ -6,15 +6,25 @@ import {
 	isBlockedCrossSiteMutation,
 } from '@/lib/admin-auth';
 import { applyViewerSecurityHeaders, handleContentRequest } from '@/lib/content-viewer';
+import { handleBrandingAssetRequest } from '@/lib/branding';
 
 /**
  * Unified request middleware:
+ * - `/branding/logo` and `/branding/favicon` serve custom uploaded branding assets from R2 (`_branding/*`).
  * - `/content/*` streams presentation files from R2 with optional per-presentation D1 Basic Auth (`X-Frame-Options: SAMEORIGIN`).
  * - `/admin` and `/admin/*` enforce CSRF checks, `X-Frame-Options: DENY`, first-run `/admin/setup` routing, and KV-backed admin sessions.
  * - `/` and public assets pass through with `X-Frame-Options: SAMEORIGIN`.
  */
 export const onRequest = defineMiddleware(async (context, next) => {
 	const { pathname } = context.url;
+
+	if (pathname === '/branding/logo' || pathname === '/branding/favicon') {
+		const response = await handleBrandingAssetRequest(
+			context.request,
+			env as unknown as { BUCKET?: R2Bucket }
+		);
+		return applyViewerSecurityHeaders(response);
+	}
 
 	if (pathname === '/content' || pathname.startsWith('/content/')) {
 		const response = await handleContentRequest(

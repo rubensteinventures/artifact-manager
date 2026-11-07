@@ -16,8 +16,8 @@ A single, white-label Cloudflare Worker application that both **serves interacti
   - Upload individual files, nested directories, or `.zip` archives (extracted client-side with automatic wrapper-folder stripping).
   - Create folders, rename files inline, delete files, and copy public URLs.
   - Protected by bcrypt administrator credentials in D1, IP-based login rate limiting in KV, cross-site mutation CSRF protection, `X-Frame-Options: DENY`, and opaque server-side sessions in Cloudflare KV (`SESSION`).
-- **White-Label Branding via Environment Variables**:
-  - Customize application name, organization name, website URL, logo URL, hero copy, and public content base URL via standard Wrangler `vars` or Cloudflare Worker environment variables—with clean neutral defaults out of the box.
+- **White-Label Branding (`/admin/setup` & `/admin/settings`, with Optional Env Overrides)**:
+  - Configure application name, organization name, website URL, hero copy, public content base URL, and upload a custom project **logo** and **favicon** directly in the browser during `/admin/setup` or anytime later at `/admin/settings`—with optional environment variable overrides (`APP_NAME`, `ORG_NAME`, `ORG_URL`, `LOGO_URL`, `FAVICON_URL`, `HERO_TITLE`, `HERO_SUBTITLE`, `PUBLIC_CONTENT_BASE_URL`) when needed.
 - **Bearer-Authenticated Skill API (`/admin/api/v1/skill/presentations`)**:
   - Automate creating or replacing presentations and their R2 files from CI/CD or AI coding agents using `SKILL_API_TOKEN`.
 
@@ -28,9 +28,11 @@ A single, white-label Cloudflare Worker application that both **serves interacti
 | Path | Auth | Purpose |
 |------|------|---------|
 | `/` | Public | White-labeled landing page |
+| `/branding/logo` & `/branding/favicon` | Public | Serves custom uploaded brand logo and favicon from R2 (`_branding/*`) |
 | `/content/{slug}` & `/content/{slug}/*` | Public or Visitor Basic Auth | Serves presentation files from R2 under `content/{slug}/` |
 | `/admin` | Admin Session | Presentation dashboard (create, search, sort) |
-| `/admin/setup` | Public (First-Run Only) | One-time initial administrator setup screen when `admins` has `0` rows (permanently locks once an admin is configured) |
+| `/admin/setup` | Public (First-Run Only) | One-time initial administrator + branding/logo/favicon setup wizard when `admins` has `0` rows (permanently locks once an admin is configured) |
+| `/admin/settings` | Admin Session | Update project branding settings and upload/replace/reset custom logo & favicon |
 | `/admin/login` | Public (rate-limited) | Administrator login |
 | `/admin/logout` & `/admin/api/logout` | Admin Session | Ends admin session and redirects to `/admin/login` |
 | `/admin/presentations/{slug}` | Admin Session | Manage presentation files, folders, and visitor credentials |
@@ -49,7 +51,7 @@ Clicking **Deploy to Cloudflare** automates the entire setup on your Cloudflare 
 1. Clones this repository into your GitHub or GitLab account.
 2. Automatically provisions the D1 database (`DB`), R2 bucket (`BUCKET`), and KV namespace (`SESSION`) and wires their IDs into `wrangler.jsonc`.
 3. Runs `npm run deploy` (`astro build`, remote D1 schema migrations via `wrangler d1 migrations apply DB --remote`, and `wrangler deploy`).
-4. Once deployed, open `https://<your-worker>.<your-subdomain>.workers.dev/admin` in your browser—it will automatically redirect to `/admin/setup` where you can create your initial administrator username and password.
+4. Once deployed, open `https://<your-worker>.<your-subdomain>.workers.dev/admin` in your browser—it will automatically redirect to `/admin/setup` where you can create your initial administrator username and password, configure your branding, and upload a custom logo and favicon (you can also update branding anytime later at `/admin/settings`).
 
 ### Optional: Environment Variable Override & Account Recovery (`ADMIN_USERNAME` / `ADMIN_PASSWORD`)
 
@@ -150,16 +152,19 @@ npx wrangler d1 execute presentations_db --remote --command "INSERT INTO admins 
 
 See [docs/admin_setup.md](docs/admin_setup.md) for additional details on managing local vs. remote admin accounts and password recovery.
 
-### Step 6: Configure Custom Branding (Optional)
+### Step 6: Configure Custom Branding (In-Browser or Optional Environment Variable Overrides)
 
-All branding is controlled via environment variables under `"vars"` in [`wrangler.jsonc`](wrangler.jsonc) (or in the Cloudflare Dashboard under **Workers & Pages → your worker → Settings → Variables and Secrets**):
+By default, no branding environment variables are required in [`wrangler.jsonc`](wrangler.jsonc). You can configure all branding parameters—and upload a custom **logo** and **favicon** (stored in R2 under `_branding/logo` and `_branding/favicon`)—directly in the browser during `/admin/setup` or anytime later at `/admin/settings`.
+
+If you want to enforce specific branding values via infrastructure-as-code, any non-empty environment variable set in Cloudflare (**Workers & Pages → your worker → Settings → Variables and Secrets**) or `"vars"` in [`wrangler.jsonc`](wrangler.jsonc) automatically overrides the corresponding database setting:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `APP_NAME` | `"Presentation Manager"` | Application title shown in the `/admin` navigation bar, browser title, and footer. |
 | `ORG_NAME` | Falls back to `APP_NAME` | Organization name shown on the public `/` landing page, footer copyright, and 401 Access Denied prompt. |
 | `ORG_URL` | `""` *(hidden)* | External `https://...` website link displayed in the header on `/`. |
-| `LOGO_URL` | `""` *(built-in icon)* | URL (`https://...` or `/path/to/logo.svg`) for your brand logo on `/`, the 401 page, and `/admin`. |
+| `LOGO_URL` | `""` *(built-in icon or uploaded logo)* | URL (`https://...` or `/path/to/logo.svg`) for your brand logo on `/`, the 401 page, and `/admin`. |
+| `FAVICON_URL` | `"/favicon.svg"` *(or uploaded favicon)* | URL (`https://...` or `/path/to/favicon.png`) for the browser favicon across `/`, the 401 page, and `/admin`. |
 | `HERO_TITLE` | `"Interactive Presentations"` | Main headline on the public `/` landing page. |
 | `HERO_SUBTITLE` | `"Explore shared presentations and interactive decks."` | Subtitle text on the public `/` landing page. |
 | `PUBLIC_CONTENT_BASE_URL` | `""` *(same origin)* | Optional base URL override for "View" and "Copy public URL" links in `/admin` (leave empty to use the Worker's own origin). |

@@ -2,7 +2,7 @@
 
 To access the `/admin` dashboard, at least one administrator account must be configured. You can set up or recover your administrator account in three ways:
 
-1. **Browser First-Run Setup (`/admin/setup`):** When `admins` in D1 has `0` rows and no `ADMIN_USERNAME`/`ADMIN_PASSWORD` override is set, visiting `/admin` redirects to `/admin/setup` so you can create the initial administrator in your browser. Once created, `/admin/setup` permanently locks itself.
+1. **Browser First-Run Setup (`/admin/setup`):** When `admins` in D1 has `0` rows and no `ADMIN_USERNAME`/`ADMIN_PASSWORD` override is set, visiting `/admin` redirects to `/admin/setup` so you can create the initial administrator, configure project branding, and upload a custom logo and favicon in your browser. Once created, `/admin/setup` permanently locks itself (you can update branding anytime later at `/admin/settings`).
 2. **Environment Variable Override & Recovery (`ADMIN_USERNAME` / `ADMIN_PASSWORD`):** Setting `ADMIN_USERNAME` and `ADMIN_PASSWORD` (at least 8 characters) in Cloudflare Worker Variables/Secrets allows you to sign in at `/admin/login` and automatically upserts the bcrypt password hash into D1 (`ON CONFLICT(username) DO UPDATE`). After your initial deployment and first sign-in (or after an emergency password recovery), **you should delete `ADMIN_USERNAME` and `ADMIN_PASSWORD`** from your Worker configuration—your bcrypt hash remains stored in D1 and those variables are only needed if you ever need to perform emergency credential recovery in the future.
 3. **Wrangler CLI (`wrangler d1 execute`):** Manually hash a password with `bcryptjs` and insert it into D1.
 

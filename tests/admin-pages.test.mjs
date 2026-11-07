@@ -6,11 +6,22 @@ import { fileURLToPath } from 'node:url';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-test('AdminLayout, login, dashboard, and presentation detail pages use /admin/* routes and getBrandingConfig', () => {
+test('Middleware, AdminLayout, login, setup, settings, dashboard, and presentation detail pages use /admin/* routes and loadBrandingConfig', () => {
+	const middleware = fs.readFileSync(path.join(rootDir, 'src/middleware.ts'), 'utf8');
+	assert.match(middleware, /\/branding\/logo/);
+	assert.match(middleware, /\/branding\/favicon/);
+	assert.match(middleware, /handleBrandingAssetRequest/);
+
 	const layout = fs.readFileSync(path.join(rootDir, 'src/layouts/AdminLayout.astro'), 'utf8');
 	assert.match(layout, /href="\/admin"/);
+	assert.match(layout, /href="\/admin\/settings"/);
 	assert.match(layout, /action="\/admin\/api\/logout"/);
-	assert.match(layout, /getBrandingConfig/);
+	assert.match(layout, /loadBrandingConfig/);
+	assert.match(layout, /href=\{branding\.faviconUrl\}/);
+
+	const indexPage = fs.readFileSync(path.join(rootDir, 'src/pages/index.astro'), 'utf8');
+	assert.match(indexPage, /loadBrandingConfig/);
+	assert.match(indexPage, /href=\{branding\.faviconUrl\}/);
 
 	const login = fs.readFileSync(path.join(rootDir, 'src/pages/admin/login.astro'), 'utf8');
 	assert.match(login, /Astro\.redirect\('\/admin'\)/);
@@ -19,14 +30,29 @@ test('AdminLayout, login, dashboard, and presentation detail pages use /admin/* 
 	const setup = fs.readFileSync(path.join(rootDir, 'src/pages/admin/setup.astro'), 'utf8');
 	assert.match(setup, /ensureAdminInitialized/);
 	assert.match(setup, /createInitialAdmin/);
+	assert.match(setup, /saveBrandingSettings/);
+	assert.match(setup, /enctype="multipart\/form-data"/);
+	assert.match(setup, /name="logo_file"/);
+	assert.match(setup, /name="favicon_file"/);
 	assert.match(setup, /Astro\.redirect\('\/admin'\)/);
 	assert.match(setup, /Astro\.redirect\('\/admin\/login'\)/);
 	assert.doesNotMatch(setup, /\bclassName="/);
 
+	const settings = fs.readFileSync(path.join(rootDir, 'src/pages/admin/settings.astro'), 'utf8');
+	assert.match(settings, /loadBrandingConfig/);
+	assert.match(settings, /saveBrandingSettings/);
+	assert.match(settings, /enctype="multipart\/form-data"/);
+	assert.match(settings, /name="logo_file"/);
+	assert.match(settings, /name="favicon_file"/);
+	assert.match(settings, /name="clear_logo"/);
+	assert.match(settings, /name="clear_favicon"/);
+	assert.match(settings, /envOverrides/);
+	assert.doesNotMatch(settings, /\bclassName="/);
+
 	const dashboard = fs.readFileSync(path.join(rootDir, 'src/pages/admin/index.astro'), 'utf8');
 	assert.match(dashboard, /Astro\.redirect\(`\/admin\/presentations\/\$\{slugCheck\.slug\}`\)/);
 	assert.match(dashboard, /href=\{`\/admin\/presentations\/\$\{p\.slug\}`\}/);
-	assert.match(dashboard, /getBrandingConfig/);
+	assert.match(dashboard, /loadBrandingConfig/);
 
 	const slugPage = fs.readFileSync(
 		path.join(rootDir, 'src/pages/admin/presentations/[slug].astro'),
@@ -35,6 +61,7 @@ test('AdminLayout, login, dashboard, and presentation detail pages use /admin/* 
 	assert.match(slugPage, /Astro\.redirect\('\/admin'\)/);
 	assert.match(slugPage, /Astro\.redirect\(`\/admin\/presentations\/\$\{slug\}`\)/);
 	assert.match(slugPage, /href="\/admin"/);
+	assert.match(slugPage, /loadBrandingConfig/);
 	assert.match(slugPage, /fetch\(`\/admin\/api\/upload\/\$\{slug\}`/);
 	assert.match(slugPage, /fetch\('\/admin\/api\/generate-passphrase'\)/);
 	assert.match(

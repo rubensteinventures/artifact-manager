@@ -1,7 +1,7 @@
 ---
 import { env } from 'cloudflare:workers';
 import { validatePresentationSlug } from '@/lib/slug-username';
-import { getBrandingConfig } from '@/lib/branding';
+import { loadBrandingConfig } from '@/lib/branding';
 import Layout from '@/layouts/AdminLayout.astro';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/starwind/card/index.ts';
 import { Button } from '@/components/starwind/button/index.ts';
@@ -11,8 +11,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Plus, Settings, ExternalLink } from 'lucide-astro';
 
 const db = env.DB;
-const branding = getBrandingConfig(
-	env as unknown as Record<string, unknown>,
+const branding = await loadBrandingConfig(
+	env as unknown as Record<string, unknown> & { DB?: D1Database },
 	Astro.url
 );
 

@@ -15,16 +15,16 @@ To access the `/admin` dashboard, at least one administrator account must be con
 
 Seeding data locally does **not** affect login when the dev server is started with `--remote`. Use `--remote` on `d1 execute` to match production/remote dev, or run plain `wrangler dev` to use local D1.
 
-## Dev seed (local testing)
+## Local Development Setup
 
-For a **known local-only** admin (`testadmin` / `testpass123`), apply migrations and seed:
+Apply D1 migrations locally and start the dev server:
 
 ```bash
-npm run db:setup:local
+npm run db:migrate:local
 npx wrangler dev
 ```
 
-Then visit `/admin/login`. Details: [seed/README.md](../seed/README.md).
+Then open `/admin` in your browser—because the local `admins` table is empty, it will automatically redirect to `/admin/setup` where you can create your local administrator account and configure project branding.
 
 ## Visitor passwords (presentations)
 

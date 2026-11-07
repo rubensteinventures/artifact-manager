@@ -189,14 +189,10 @@ npx wrangler secret put SKILL_API_TOKEN
 
 ## Local Development
 
-1. Apply local D1 migrations (either with the pre-seeded `testadmin` / `testpass123` account, or migrate-only to walk through the `/admin/setup` wizard in your browser):
+1. Apply local D1 database migrations:
 
    ```bash
-   # Option A: Apply migrations only (visit /admin/setup in browser to configure admin + branding)
    npm run db:migrate:local
-
-   # Option B: Apply migrations AND seed testadmin / testpass123
-   npm run db:setup:local
    ```
 
 2. (Optional) Create a `.dev.vars` file in the project root for local Skill API testing:
@@ -215,7 +211,7 @@ npx wrangler secret put SKILL_API_TOKEN
    npm run build && npx wrangler dev
    ```
 
-4. Open `/admin/login` and sign in with `testadmin` / `testpass123`.
+4. Open `/admin` in your browser—on first run it will automatically redirect to `/admin/setup` where you can create your local administrator account and configure branding.
 
 ---
 

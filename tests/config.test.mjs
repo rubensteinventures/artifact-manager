@@ -34,13 +34,16 @@ test('single D1 migration 0001_init.sql defines admins, presentations (with uplo
 	assert.match(m1, /favicon_url TEXT/);
 });
 
-test('package.json configures Deploy to Cloudflare scripts (using DB binding) and binding descriptions', () => {
+test('package.json configures Deploy to Cloudflare scripts (using DB binding) and binding descriptions without pre-seeded admin scripts', () => {
 	const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
 	assert.equal(pkg.scripts['db:migrate:remote'], 'wrangler d1 migrations apply DB --remote');
 	assert.equal(
 		pkg.scripts['deploy'],
 		'npm run build && npm run db:migrate:remote && wrangler deploy'
 	);
+	assert.equal(pkg.scripts['db:seed:local'], undefined);
+	assert.equal(pkg.scripts['db:setup:local'], undefined);
+	assert.equal(fs.existsSync(path.join(rootDir, 'seed')), false);
 	assert.ok(pkg.cloudflare?.bindings?.DB?.description);
 	assert.ok(pkg.cloudflare?.bindings?.BUCKET?.description);
 	assert.ok(pkg.cloudflare?.bindings?.SESSION?.description);

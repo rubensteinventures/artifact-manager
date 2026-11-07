@@ -3,15 +3,6 @@
 	"compatibility_date": "2025-04-01",
 	"compatibility_flags": ["nodejs_compat"],
 	"workers_dev": true,
-	"vars": {
-		"APP_NAME": "Presentation Manager",
-		"ORG_NAME": "",
-		"ORG_URL": "",
-		"LOGO_URL": "",
-		"HERO_TITLE": "Interactive Presentations",
-		"HERO_SUBTITLE": "Explore shared presentations and interactive decks.",
-		"PUBLIC_CONTENT_BASE_URL": ""
-	},
 	"d1_databases": [
 		{
 			"binding": "DB",

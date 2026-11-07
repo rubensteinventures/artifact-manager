@@ -6,13 +6,13 @@ import { fileURLToPath } from 'node:url';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-test('wrangler.jsonc configures DB, BUCKET, SESSION, and branding vars with safe placeholders', () => {
+test('wrangler.jsonc configures DB, BUCKET, and SESSION without hardcoded vars block', () => {
 	const raw = fs.readFileSync(path.join(rootDir, 'wrangler.jsonc'), 'utf8');
 	assert.match(raw, /"binding":\s*"DB"/);
 	assert.match(raw, /"binding":\s*"BUCKET"/);
 	assert.match(raw, /"binding":\s*"SESSION"/);
 	assert.match(raw, /"workers_dev":\s*true/);
-	assert.match(raw, /"APP_NAME"/);
+	assert.doesNotMatch(raw, /"vars"\s*:/);
 	assert.doesNotMatch(raw, /YOUR_PREVIEW_KV_NAMESPACE_ID/);
 	assert.doesNotMatch(raw, /SESSION_SECRET/);
 	assert.doesNotMatch(raw, /single-page-application/);
@@ -21,12 +21,17 @@ test('wrangler.jsonc configures DB, BUCKET, SESSION, and branding vars with safe
 	assert.doesNotMatch(raw, /innovaitionpartners/i);
 });
 
-test('D1 migrations define admins and presentations tables with uploaded_at', () => {
-	const m1 = fs.readFileSync(path.join(rootDir, 'migrations/0001_init.sql'), 'utf8');
-	const m2 = fs.readFileSync(path.join(rootDir, 'migrations/0002_add_uploaded_at.sql'), 'utf8');
+test('single D1 migration 0001_init.sql defines admins, presentations (with uploaded_at), and settings tables', () => {
+	const migrationsDir = path.join(rootDir, 'migrations');
+	const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql'));
+	assert.deepEqual(files, ['0001_init.sql']);
+
+	const m1 = fs.readFileSync(path.join(migrationsDir, '0001_init.sql'), 'utf8');
 	assert.match(m1, /CREATE TABLE IF NOT EXISTS admins/);
 	assert.match(m1, /CREATE TABLE IF NOT EXISTS presentations/);
-	assert.match(m2, /ALTER TABLE presentations ADD COLUMN uploaded_at TEXT/);
+	assert.match(m1, /uploaded_at TEXT/);
+	assert.match(m1, /CREATE TABLE IF NOT EXISTS settings/);
+	assert.match(m1, /favicon_url TEXT/);
 });
 
 test('package.json configures Deploy to Cloudflare scripts (using DB binding) and binding descriptions', () => {

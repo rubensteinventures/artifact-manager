@@ -131,32 +131,40 @@ Copy the `id` and `preview_id` values from the command output into [`wrangler.js
 
 ### Step 4: Apply D1 Database Migrations
 
-Initialize the `admins` and `presentations` tables on your remote D1 database:
+Initialize the `admins`, `presentations`, and `settings` tables on your remote D1 database:
 
 ```bash
 npx wrangler d1 migrations apply presentations_db --remote
 ```
 
-### Step 5: Create Your First Admin User
+### Step 5: Build and Deploy to Cloudflare
 
-You have three ways to create the initial administrator account:
-
-1. **Browser First-Run Wizard (Recommended):** Deploy the Worker (Step 8) and visit `/admin` in your browser. When the `admins` table is empty, the Worker automatically redirects to `/admin/setup` where you can choose your initial username and password. Once created, `/admin/setup` permanently locks itself.
-2. **Environment Variable Override / Recovery (`ADMIN_USERNAME` & `ADMIN_PASSWORD`):** Set `ADMIN_USERNAME` and `ADMIN_PASSWORD` (`>= 8` characters) in your Worker's Variables & Secrets, then sign in at `/admin/login`. The Worker will automatically hash and upsert your credentials into D1.
-3. **Manual Wrangler CLI:** Generate a bcrypt hash (cost `10`) and insert it directly into D1:
+Build the Astro Worker bundle and deploy with Wrangler:
 
 ```bash
-node -e "import('bcryptjs').then(b => console.log(b.default.hashSync('CHANGE_ME_STRONG_PASSWORD', 10)))"
-npx wrangler d1 execute presentations_db --remote --command "INSERT INTO admins (username, password_hash) VALUES ('admin', 'PASTE_BCRYPT_HASH_HERE');"
+npm run build
+npx wrangler deploy
 ```
 
-See [docs/admin_setup.md](docs/admin_setup.md) for additional details on managing local vs. remote admin accounts and password recovery.
+#### Attaching a Custom Domain or Locking Down `workers.dev`
+By default, [`wrangler.jsonc`](wrangler.jsonc) sets `"workers_dev": true` so one-click and new deployments get a live `*.workers.dev` URL out of the box. Once you attach a custom domain or route in the Cloudflare Dashboard (**Workers & Pages → your worker → Settings → Domains & Routes**), you can optionally set `"workers_dev": false` in `wrangler.jsonc` if you only want the Worker reachable via your custom domain.
 
-### Step 6: Configure Custom Branding (In-Browser or Optional Environment Variable Overrides)
+### Step 6: Complete Initial Setup in the Browser (`/admin/setup`)
 
-By default, no branding environment variables are required in [`wrangler.jsonc`](wrangler.jsonc). You can configure all branding parameters—and upload a custom **logo** and **favicon** (stored in R2 under `_branding/logo` and `_branding/favicon`)—directly in the browser during `/admin/setup` or anytime later at `/admin/settings`.
+Open `https://<your-worker>.<your-subdomain>.workers.dev/admin` in your browser. Because the `admins` table is empty, the Worker automatically redirects to `/admin/setup`, where you can:
+1. Create your initial administrator username and password (`>= 8` characters).
+2. Configure your branding (`Application Name`, `Organization Name`, `Organization Website URL`, `Public Content Base URL`, `Hero Title`, and `Hero Subtitle`).
+3. Upload a custom project **logo** and **favicon** (stored in R2 at `_branding/logo` and `_branding/favicon` and served via `/branding/logo` and `/branding/favicon`), or specify external/relative URLs.
 
-If you want to enforce specific branding values via infrastructure-as-code, any non-empty environment variable set in Cloudflare (**Workers & Pages → your worker → Settings → Variables and Secrets**) or `"vars"` in [`wrangler.jsonc`](wrangler.jsonc) automatically overrides the corresponding database setting:
+Once submitted, `/admin/setup` permanently locks itself and signs you into `/admin`. You can update any branding setting or replace/reset the logo and favicon anytime later at **`/admin/settings`**.
+
+*(Alternative CLI / Headless Admin Setup: Instead of using `/admin/setup`, you can either set `ADMIN_USERNAME` and `ADMIN_PASSWORD` environment variables before your first sign-in at `/admin/login`, or manually insert a cost-10 bcrypt hash into D1 with `npx wrangler d1 execute presentations_db --remote --command "INSERT INTO admins (username, password_hash) VALUES ('admin', 'PASTE_BCRYPT_HASH_HERE');"`. See [docs/admin_setup.md](docs/admin_setup.md) for details.)*
+
+### Optional: Branding Environment Variable Overrides
+
+By default, no branding environment variables are required in [`wrangler.jsonc`](wrangler.jsonc)—everything is configured in the browser via `/admin/setup` and `/admin/settings`.
+
+If you want to enforce specific branding values via infrastructure-as-code, any non-empty environment variable set in Cloudflare (**Workers & Pages → your worker → Settings → Variables and Secrets**) or `"vars"` in [`wrangler.jsonc`](wrangler.jsonc) automatically overrides the corresponding database setting (and is badged as overridden on `/admin/settings`):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -169,7 +177,7 @@ If you want to enforce specific branding values via infrastructure-as-code, any 
 | `HERO_SUBTITLE` | `"Explore shared presentations and interactive decks."` | Subtitle text on the public `/` landing page. |
 | `PUBLIC_CONTENT_BASE_URL` | `""` *(same origin)* | Optional base URL override for "View" and "Copy public URL" links in `/admin` (leave empty to use the Worker's own origin). |
 
-### Step 7: Configure the Skill API Secret (Optional)
+### Optional: Configure the Skill API Secret (`SKILL_API_TOKEN`)
 
 If you want to create or update presentations programmatically via `/admin/api/v1/skill/presentations`, set a strong secret token:
 
@@ -177,25 +185,17 @@ If you want to create or update presentations programmatically via `/admin/api/v
 npx wrangler secret put SKILL_API_TOKEN
 ```
 
-### Step 8: Build and Deploy to Cloudflare
-
-Build the Astro Worker bundle and deploy with Wrangler:
-
-```bash
-npm run build
-npx wrangler deploy
-```
-
-#### Attaching a Custom Domain or Locking Down `workers.dev`
-By default, [`wrangler.jsonc`](wrangler.jsonc) sets `"workers_dev": true` so one-click and new deployments get a live `*.workers.dev` URL out of the box. Once you attach a custom domain or route in the Cloudflare Dashboard (**Workers & Pages → your worker → Settings → Domains & Routes**), you can optionally set `"workers_dev": false` in `wrangler.jsonc` if you only want the Worker reachable via your custom domain.
-
 ---
 
 ## Local Development
 
-1. Apply migrations and seed the local development admin (`testadmin` / `testpass123`):
+1. Apply local D1 migrations (either with the pre-seeded `testadmin` / `testpass123` account, or migrate-only to walk through the `/admin/setup` wizard in your browser):
 
    ```bash
+   # Option A: Apply migrations only (visit /admin/setup in browser to configure admin + branding)
+   npm run db:migrate:local
+
+   # Option B: Apply migrations AND seed testadmin / testpass123
    npm run db:setup:local
    ```
 

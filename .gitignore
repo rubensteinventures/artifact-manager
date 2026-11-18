@@ -6,4 +6,5 @@ dist
 .dev.vars
 wrangler-*.log
 .superpowers
+docs/superpowers
 .gemini_security

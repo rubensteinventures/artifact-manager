@@ -4,15 +4,9 @@
 
 A single, white-label Cloudflare Worker application that both **serves interactive HTML presentations** from Cloudflare R2 (`/content/{slug}/*`) and provides a **full administration dashboard & automation API** (`/admin/*`) backed by Cloudflare D1, R2, and KV.
 
-<video src="docs/brag/brag.mp4" poster="docs/brag/brag.jpg" controls playsinline width="100%">
-  <a href="docs/brag/brag.mp4" title="Watch the 20-second overview video">
-    <img src="docs/brag/brag.jpg" alt="Presentation & Artifact Manager — 20s Overview Video" width="100%" />
-  </a>
-</video>
+▶ Watch the 20-second overview video (<code>docs/brag/brag.mp4</code>):
 
-<p align="center">
-  <a href="docs/brag/brag.mp4"><strong>▶ Watch the 20-second overview video (<code>docs/brag/brag.mp4</code>)</strong></a>
-</p>
+https://github.com/user-attachments/assets/bbbdb2e4-90fa-4151-86cf-0d7c2fad3535
 
 ## Features
 

@@ -946,36 +946,36 @@
         }
       }
 
-      // SCENE 1 (0.0s - 4.4s): Public Homepage Hero
+      // SCENE 1 (0.0s - 4.4s): Public Homepage Hero (visible from frame 0)
       tl.fromTo(
         "#s1-eyebrow",
-        { y: -24, opacity: 0 },
-        { y: 0, opacity: 1, duration: 0.42, ease: "power3.out" },
-        0.1
+        { y: -8, opacity: 1 },
+        { y: 0, opacity: 1, duration: 0.4, ease: "power3.out" },
+        0
       );
       tl.fromTo(
         "#s1-title",
-        { y: 40, scale: 0.96, opacity: 0 },
-        { y: 0, scale: 1, opacity: 1, duration: 0.5, ease: "power3.out" },
-        0.2
+        { y: 12, scale: 0.98, opacity: 1 },
+        { y: 0, scale: 1, opacity: 1, duration: 0.45, ease: "power3.out" },
+        0
       );
       tl.fromTo(
         "#s1-subtitle",
-        { y: 28, opacity: 0 },
+        { y: 10, opacity: 1 },
         { y: 0, opacity: 1, duration: 0.45, ease: "power2.out" },
-        0.55
+        0
       );
       tl.fromTo(
         "#s1-pill-1",
         { x: -32, opacity: 0 },
         { x: 0, opacity: 1, duration: 0.42, ease: "back.out(1.4)" },
-        1.64
+        1.1
       );
       tl.fromTo(
         "#s1-pill-2",
         { x: 32, opacity: 0 },
         { x: 0, opacity: 1, duration: 0.42, ease: "back.out(1.4)" },
-        2.19
+        1.64
       );
 
       // SCENE 2 (4.4s - 8.75s): Admin Dashboard & Sequential Beat-Grid Rows

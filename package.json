@@ -1,0 +1,50 @@
+{
+  "name": "artifact-manager",
+  "version": "1.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "description": "Unified Cloudflare Worker for serving and administering HTML presentations from R2",
+  "dependencies": {
+    "@astrojs/cloudflare": "^14.4.8",
+    "@astrojs/compiler-rs": "^0.5.3",
+    "@tabler/icons": "^3.52.0",
+    "@tailwindcss/forms": "^0.5.11",
+    "@tailwindcss/vite": "^4.3.5",
+    "astro": "^7.4.12",
+    "bcryptjs": "^3.0.3",
+    "jszip": "^3.10.2",
+    "lucide-astro": "^0.556.0",
+    "tailwind-merge": "^3.7.0",
+    "tailwind-variants": "^4.0.2",
+    "tailwindcss": "^4.3.5",
+    "tw-animate-css": "^1.4.0"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "build": "NODE_OPTIONS=--disable-warning=DEP0040 astro build",
+    "preview": "astro preview",
+    "astro": "astro",
+    "test": "node --test tests/*.test.mjs",
+    "generate-types": "wrangler types",
+    "db:migrate:local": "wrangler d1 migrations apply presentations_db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
+    "deploy": "npm run build && npm run db:migrate:remote && wrangler deploy"
+  },
+  "cloudflare": {
+    "bindings": {
+      "DB": {
+        "description": "D1 SQLite database storing presentation metadata, visitor Basic Auth hashes, and administrator accounts"
+      },
+      "BUCKET": {
+        "description": "R2 bucket storing static HTML presentation files and assets under content/{slug}/"
+      },
+      "SESSION": {
+        "description": "KV namespace storing server-side administrator sessions and login rate-limit counters"
+      }
+    }
+  },
+  "devDependencies": {
+    "wrangler": "^4.164.0"
+  }
+}

@@ -1,0 +1,89 @@
+import { env } from 'cloudflare:workers';
+import { defineMiddleware } from 'astro:middleware';
+import {
+	applyAdminSecurityHeaders,
+	ensureAdminInitialized,
+	isBlockedCrossSiteMutation,
+} from '@/lib/admin-auth';
+import { applyViewerSecurityHeaders, handleContentRequest } from '@/lib/content-viewer';
+import { handleBrandingAssetRequest } from '@/lib/branding';
+
+/**
+ * Unified request middleware:
+ * - `/branding/logo` and `/branding/favicon` serve custom uploaded branding assets from R2 (`_branding/*`).
+ * - `/content/*` streams presentation files from R2 with optional per-presentation D1 Basic Auth (`X-Frame-Options: SAMEORIGIN`).
+ * - `/admin` and `/admin/*` enforce CSRF checks, `X-Frame-Options: DENY`, first-run `/admin/setup` routing, and KV-backed admin sessions.
+ * - `/` and public assets pass through with `X-Frame-Options: SAMEORIGIN`.
+ */
+export const onRequest = defineMiddleware(async (context, next) => {
+	const { pathname } = context.url;
+
+	if (pathname === '/branding/logo' || pathname === '/branding/favicon') {
+		const response = await handleBrandingAssetRequest(
+			context.request,
+			env as unknown as { BUCKET?: R2Bucket }
+		);
+		return applyViewerSecurityHeaders(response);
+	}
+
+	if (pathname === '/content' || pathname.startsWith('/content/')) {
+		const response = await handleContentRequest(
+			context.request,
+			env as unknown as { DB: D1Database; BUCKET: R2Bucket } & Record<string, unknown>
+		);
+		return applyViewerSecurityHeaders(response);
+	}
+
+	if (pathname === '/admin' || pathname.startsWith('/admin/')) {
+		const normalizedPath =
+			pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
+		const secFetchSite = context.request.headers.get('Sec-Fetch-Site');
+
+		if (isBlockedCrossSiteMutation(context.request.method, normalizedPath, secFetchSite)) {
+			return applyAdminSecurityHeaders(
+				new Response('Forbidden: cross-origin request blocked.', { status: 403 })
+			);
+		}
+
+		if (normalizedPath.startsWith('/admin/api/')) {
+			return applyAdminSecurityHeaders(await next());
+		}
+
+		const { initialized } = await ensureAdminInitialized(
+			env.DB,
+			env as unknown as Record<string, unknown>
+		);
+
+		if (!initialized) {
+			if (normalizedPath !== '/admin/setup') {
+				return applyAdminSecurityHeaders(context.redirect('/admin/setup'));
+			}
+			return applyAdminSecurityHeaders(await next());
+		}
+
+		const adminUsername = await context.session?.get('adminUsername');
+
+		if (normalizedPath === '/admin/setup') {
+			return applyAdminSecurityHeaders(
+				context.redirect(
+					adminUsername && typeof adminUsername === 'string' ? '/admin' : '/admin/login'
+				)
+			);
+		}
+
+		if (
+			(!adminUsername || typeof adminUsername !== 'string') &&
+			normalizedPath !== '/admin/login'
+		) {
+			return applyAdminSecurityHeaders(context.redirect('/admin/login'));
+		}
+
+		if (adminUsername && normalizedPath === '/admin/login') {
+			return applyAdminSecurityHeaders(context.redirect('/admin'));
+		}
+
+		return applyAdminSecurityHeaders(await next());
+	}
+
+	return applyViewerSecurityHeaders(await next());
+});

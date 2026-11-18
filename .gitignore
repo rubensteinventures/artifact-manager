@@ -1,0 +1,10 @@
+node_modules
+.DS_Store
+dist
+.astro
+.wrangler
+.dev.vars
+wrangler-*.log
+.superpowers
+docs/superpowers
+.gemini_security

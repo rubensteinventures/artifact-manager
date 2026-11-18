@@ -1,0 +1,316 @@
+---
+import { env } from 'cloudflare:workers';
+import Layout from '@/layouts/AdminLayout.astro';
+import {
+	Card,
+	CardContent,
+	CardHeader,
+	CardTitle,
+	CardDescription,
+} from '@/components/starwind/card/index.ts';
+import { Input } from '@/components/starwind/input/index.ts';
+import { Button } from '@/components/starwind/button/index.ts';
+import { Alert } from '@/components/starwind/alert/index.ts';
+import { ArrowLeft, CheckCircle2 } from 'lucide-astro';
+import {
+	loadBrandingConfig,
+	saveBrandingSettings,
+	DEFAULT_FAVICON_URL,
+} from '@/lib/branding';
+
+const envRecord = env as unknown as Record<string, unknown> & { DB?: D1Database };
+
+let error = '';
+let savedSuccess = false;
+
+if (Astro.request.method === 'POST') {
+	const formData = await Astro.request.formData();
+	const result = await saveBrandingSettings(env.DB, env.BUCKET, formData);
+	if (result.ok) {
+		savedSuccess = true;
+	} else {
+		error = result.error;
+	}
+}
+
+const branding = await loadBrandingConfig(envRecord, Astro.url);
+const envOverrides = branding.envOverrides;
+const hasAnyEnvOverride = Object.values(envOverrides).some(Boolean);
+const customFaviconSet = branding.faviconUrl !== DEFAULT_FAVICON_URL;
+---
+
+<Layout title="Branding & Settings">
+	<div class="flex flex-col gap-6 max-w-4xl mx-auto">
+		<div class="flex items-center gap-4">
+			<a href="/admin">
+				<Button variant="ghost" size="sm">
+					<ArrowLeft class="w-4 h-4 mr-2" /> Back to Dashboard
+				</Button>
+			</a>
+			<div>
+				<h1 class="text-3xl font-bold text-slate-900">Branding & Settings</h1>
+				<p class="text-sm text-slate-500">
+					Customize your application name, landing page copy, logo, and favicon.
+				</p>
+			</div>
+		</div>
+
+		{savedSuccess && (
+			<Alert variant="info" class="bg-green-50 border-green-200 text-green-800 text-sm">
+				<CheckCircle2 class="w-4 h-4 mr-2 inline" /> Branding settings saved.
+			</Alert>
+		)}
+
+		{error && (
+			<Alert variant="destructive" class="text-sm">
+				{error}
+			</Alert>
+		)}
+
+		{hasAnyEnvOverride && (
+			<Alert variant="info" class="bg-amber-50 border-amber-200 text-amber-900 text-xs">
+				One or more fields below are currently overridden by Cloudflare Worker environment variables. Database values will take effect whenever those environment variables are removed or left empty.
+			</Alert>
+		)}
+
+		<Card>
+			<CardHeader>
+				<CardTitle>Project Branding</CardTitle>
+				<CardDescription>
+					Configure how this portal appears on the public landing page (<code class="font-mono">/</code>), the 401 Access Denied prompt, and the <code class="font-mono">/admin</code> dashboard.
+				</CardDescription>
+			</CardHeader>
+			<CardContent>
+				<form method="POST" enctype="multipart/form-data" class="space-y-6">
+					<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+						<div class="space-y-2">
+							<div class="flex items-center justify-between gap-2">
+								<label for="app_name" class="text-sm font-medium">
+									Application Name
+								</label>
+								{envOverrides.appName && (
+									<span class="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+										Overridden by APP_NAME
+									</span>
+								)}
+							</div>
+							<Input
+								id="app_name"
+								name="app_name"
+								type="text"
+								value={branding.appName}
+								placeholder="Presentation Manager"
+							/>
+						</div>
+
+						<div class="space-y-2">
+							<div class="flex items-center justify-between gap-2">
+								<label for="org_name" class="text-sm font-medium">
+									Organization Name
+								</label>
+								{envOverrides.orgName && (
+									<span class="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+										Overridden by ORG_NAME
+									</span>
+								)}
+							</div>
+							<Input
+								id="org_name"
+								name="org_name"
+								type="text"
+								value={branding.orgName}
+								placeholder="Defaults to Application Name"
+							/>
+						</div>
+					</div>
+
+					<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+						<div class="space-y-2">
+							<div class="flex items-center justify-between gap-2">
+								<label for="org_url" class="text-sm font-medium">
+									Organization Website URL
+								</label>
+								{envOverrides.orgUrl && (
+									<span class="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+										Overridden by ORG_URL
+									</span>
+								)}
+							</div>
+							<Input
+								id="org_url"
+								name="org_url"
+								type="url"
+								value={branding.orgUrl ?? ''}
+								placeholder="https://example.com"
+							/>
+						</div>
+
+						<div class="space-y-2">
+							<div class="flex items-center justify-between gap-2">
+								<label for="public_content_base_url" class="text-sm font-medium">
+									Public Content Base URL
+								</label>
+								{envOverrides.publicContentBaseUrl && (
+									<span class="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+										Overridden by PUBLIC_CONTENT_BASE_URL
+									</span>
+								)}
+							</div>
+							<Input
+								id="public_content_base_url"
+								name="public_content_base_url"
+								type="url"
+								value={branding.configuredPublicContentBaseUrl ?? ''}
+								placeholder="Leave empty to use this Worker's origin"
+							/>
+						</div>
+					</div>
+
+					<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+						<div class="space-y-2">
+							<div class="flex items-center justify-between gap-2">
+								<label for="hero_title" class="text-sm font-medium">
+									Landing Page Hero Title
+								</label>
+								{envOverrides.heroTitle && (
+									<span class="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+										Overridden by HERO_TITLE
+									</span>
+								)}
+							</div>
+							<Input
+								id="hero_title"
+								name="hero_title"
+								type="text"
+								value={branding.heroTitle}
+								placeholder="Interactive Presentations"
+							/>
+						</div>
+
+						<div class="space-y-2">
+							<div class="flex items-center justify-between gap-2">
+								<label for="hero_subtitle" class="text-sm font-medium">
+									Landing Page Hero Subtitle
+								</label>
+								{envOverrides.heroSubtitle && (
+									<span class="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+										Overridden by HERO_SUBTITLE
+									</span>
+								)}
+							</div>
+							<Input
+								id="hero_subtitle"
+								name="hero_subtitle"
+								type="text"
+								value={branding.heroSubtitle}
+								placeholder="Explore shared presentations and interactive decks."
+							/>
+						</div>
+					</div>
+
+					<div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+						<div class="space-y-3 rounded-lg border border-slate-200 bg-slate-50/60 p-4">
+							<div class="flex items-center justify-between gap-2">
+								<label for="logo_file" class="text-sm font-medium">
+									Project Logo
+								</label>
+								{envOverrides.logoUrl && (
+									<span class="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+										Overridden by LOGO_URL
+									</span>
+								)}
+							</div>
+							{branding.logoUrl ? (
+								<div class="flex items-center gap-3 rounded border border-slate-200 bg-white p-2.5">
+									<img
+										src={branding.logoUrl}
+										alt="Current logo"
+										class="h-8 w-auto max-w-[160px] object-contain"
+									/>
+									<span class="text-xs text-slate-500 truncate">{branding.logoUrl}</span>
+								</div>
+							) : (
+								<p class="text-xs text-slate-500">Using built-in projector icon.</p>
+							)}
+							<input
+								id="logo_file"
+								name="logo_file"
+								type="file"
+								accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,image/x-icon"
+								class="block w-full text-xs text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-200 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-slate-800 hover:file:bg-slate-300"
+							/>
+							<div class="space-y-1">
+								<label for="logo_url" class="text-xs text-slate-600">
+									Or specify logo URL
+								</label>
+								<Input
+									id="logo_url"
+									name="logo_url"
+									type="text"
+									value={branding.logoUrl ?? ''}
+									placeholder="/branding/logo or https://..."
+								/>
+							</div>
+							{branding.logoUrl && (
+								<label class="inline-flex items-center gap-2 text-xs text-slate-700 pt-1">
+									<input type="checkbox" name="clear_logo" value="1" class="rounded border-slate-300" />
+									Reset logo to built-in default icon
+								</label>
+							)}
+						</div>
+
+						<div class="space-y-3 rounded-lg border border-slate-200 bg-slate-50/60 p-4">
+							<div class="flex items-center justify-between gap-2">
+								<label for="favicon_file" class="text-sm font-medium">
+									Project Favicon
+								</label>
+								{envOverrides.faviconUrl && (
+									<span class="rounded bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+										Overridden by FAVICON_URL
+									</span>
+								)}
+							</div>
+							<div class="flex items-center gap-3 rounded border border-slate-200 bg-white p-2.5">
+								<img
+									src={branding.faviconUrl}
+									alt="Current favicon"
+									class="h-6 w-6 object-contain"
+								/>
+								<span class="text-xs text-slate-500 truncate">{branding.faviconUrl}</span>
+							</div>
+							<input
+								id="favicon_file"
+								name="favicon_file"
+								type="file"
+								accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,image/x-icon,image/vnd.microsoft.icon"
+								class="block w-full text-xs text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-200 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-slate-800 hover:file:bg-slate-300"
+							/>
+							<div class="space-y-1">
+								<label for="favicon_url" class="text-xs text-slate-600">
+									Or specify favicon URL
+								</label>
+								<Input
+									id="favicon_url"
+									name="favicon_url"
+									type="text"
+									value={customFaviconSet ? branding.faviconUrl : ''}
+									placeholder="/favicon.svg or https://..."
+								/>
+							</div>
+							{customFaviconSet && (
+								<label class="inline-flex items-center gap-2 text-xs text-slate-700 pt-1">
+									<input type="checkbox" name="clear_favicon" value="1" class="rounded border-slate-300" />
+									Reset favicon to built-in default (<code class="font-mono">/favicon.svg</code>)
+								</label>
+							)}
+						</div>
+					</div>
+
+					<div class="flex justify-end pt-2">
+						<Button type="submit">Save Branding Settings</Button>
+					</div>
+				</form>
+			</CardContent>
+		</Card>
+	</div>
+</Layout>

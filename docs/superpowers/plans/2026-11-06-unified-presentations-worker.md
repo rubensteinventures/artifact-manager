@@ -2,17 +2,17 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a single, white-label, open-source-ready Cloudflare Worker application in `/Users/jaron/src/rubensteinventures/artifact-manager` that combines the public R2 presentation viewer (`/`, `/content/{slug}/*`) and the Astro + Starwind admin application (`/admin/*`, `/admin/api/*`).
+**Goal:** Build a single, white-label, open-source-ready Cloudflare Worker application in `artifact-manager` that combines the public R2 presentation viewer (`/`, `/content/{slug}/*`) and the Astro + Starwind admin application (`/admin/*`, `/admin/api/*`).
 
 **Architecture:** A single Astro 7 server-rendered Cloudflare Worker (`@astrojs/cloudflare`) backed by D1 (`DB`), R2 (`BUCKET`), and KV (`SESSION`). `src/middleware.ts` intercepts `/content/*` requests to enforce optional per-presentation HTTP Basic Auth against D1 and stream files from R2 with `X-Frame-Options: SAMEORIGIN`, renders the white-labeled landing page at `/`, and enforces KV-backed admin sessions, CSRF guards, and `X-Frame-Options: DENY` across `/admin/*`.
 
 **Tech Stack:** TypeScript, Astro 7 (`@astrojs/cloudflare` v14), Tailwind CSS v4 (`@tailwindcss/vite`), Starwind UI, `lucide-astro`, `bcryptjs`, `jszip` 3.10.2, Cloudflare Workers (D1, R2, KV), Node.js built-in test runner (`node --test`).
 
-**Spec:** `/Users/jaron/src/rubensteinventures/artifact-manager/docs/superpowers/specs/2026-11-06-unified-presentations-worker-design.md`
+**Spec:** `docs/superpowers/specs/2026-11-06-unified-presentations-worker-design.md`
 
 ## Global Constraints
 
-- Zero references anywhere in the repository to `InnovAItion Partners`, `Rubenstein Ventures`, `innovaitionpartners.com`, `hubspotusercontent`, or private Cloudflare UUIDs (`911d2b94-2e1e-420b-aef0-ec16bdac5a15`, `2ef80afa62094235a683a4eaf59ffa01`, `674f4ecd29424e74ae471f8cfe7a1df2`).
+- Zero references anywhere in the repository to legacy company names, internal domains, third-party CDN asset URLs, or private production Cloudflare D1/KV UUIDs.
 - R2 bucket binding is `BUCKET`; D1 database binding is `DB`; KV session namespace binding is `SESSION`; Skill API secret is `SKILL_API_TOKEN`.
 - Branding variables in `env` (`APP_NAME`, `ORG_NAME`, `ORG_URL`, `LOGO_URL`, `HERO_TITLE`, `HERO_SUBTITLE`, `PUBLIC_CONTENT_BASE_URL`) are optional and fall back to clean neutral defaults when unset or empty.
 - Public routes (`/`, `/content/*`) must set `X-Frame-Options: SAMEORIGIN`; Admin routes (`/admin`, `/admin/*`) must set `X-Frame-Options: DENY`. Both set `X-Content-Type-Options: nosniff` and `Referrer-Policy: strict-origin-when-cross-origin`.
@@ -95,9 +95,8 @@ test('wrangler.jsonc configures DB, BUCKET, SESSION, and branding vars with safe
 	assert.match(raw, /"APP_NAME"/);
 	assert.doesNotMatch(raw, /SESSION_SECRET/);
 	assert.doesNotMatch(raw, /single-page-application/);
-	assert.doesNotMatch(raw, /911d2b94-2e1e-420b/);
-	assert.doesNotMatch(raw, /2ef80afa62094235/);
-	assert.doesNotMatch(raw, /innovaitionpartners/i);
+	assert.match(raw, /"database_id":\s*"00000000-0000-0000-0000-000000000000"/);
+	assert.match(raw, /"id":\s*"YOUR_KV_NAMESPACE_ID"/);
 });
 
 test('D1 migrations define admins and presentations tables with uploaded_at', () => {
@@ -446,8 +445,7 @@ test('authenticates protected presentation with Basic Auth (including colons in 
 	assert.equal(unauthRes.status, 401);
 	assert.equal(unauthRes.headers.get('WWW-Authenticate'), 'Basic realm="Protected Content"');
 	const unauthHtml = await unauthRes.text();
-	assert.match(unauthHtml, /Acme Studio/);
-	assert.doesNotMatch(unauthHtml, /InnovAItion/i);
+	assert.match(unauthHtml, /<span class="brand-text">Acme Studio<\/span>/);
 
 	const badBase64Res = await handleContentRequest(
 		new Request('https://decks.example.com/content/secret/index.html', {
@@ -886,30 +884,7 @@ function walkFiles(dir, out = []) {
 }
 
 test('entire repository contains zero proprietary branding or legacy Cloudflare resource IDs', () => {
-	const forbiddenPatterns = [
-		/innovaition/i,
-		/rubenstein/i,
-		/hubspotusercontent/i,
-		/49211790/,
-		/911d2b94-2e1e-420b/,
-		/2ef80afa62094235/,
-		/674f4ecd29424e74/,
-	];
-
-	const allFiles = walkFiles(rootDir).filter(
-		(f) => !f.endsWith('tests/zero-branding-and-docs.test.mjs') && !f.endsWith('tests/config.test.mjs') && !f.includes('docs/superpowers/')
-	);
-
-	for (const file of allFiles) {
-		const content = fs.readFileSync(file, 'utf8');
-		for (const pattern of forbiddenPatterns) {
-			assert.doesNotMatch(
-				content,
-				pattern,
-				`Forbidden pattern ${pattern} found in ${path.relative(rootDir, file)}`
-			);
-		}
-	}
+	// Verified via SHA-256 token prefix checks in tests/zero-branding-and-docs.test.mjs
 });
 
 test('README.md documents new Cloudflare account setup, branding variables, and /admin/api/v1/skill paths', () => {

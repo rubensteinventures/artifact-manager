@@ -29,8 +29,13 @@ test('Middleware, AdminLayout, login, setup, settings, dashboard, and presentati
 
 	const setup = fs.readFileSync(path.join(rootDir, 'src/pages/admin/setup.astro'), 'utf8');
 	assert.match(setup, /ensureAdminInitialized/);
+	assert.match(setup, /validateBrandingFormData/);
 	assert.match(setup, /createInitialAdmin/);
 	assert.match(setup, /saveBrandingSettings/);
+	assert.ok(
+		setup.indexOf('createInitialAdmin(') < setup.indexOf('saveBrandingSettings('),
+		'setup.astro must create the initial admin atomically before persisting branding to D1/R2'
+	);
 	assert.match(setup, /enctype="multipart\/form-data"/);
 	assert.match(setup, /name="logo_file"/);
 	assert.match(setup, /name="favicon_file"/);

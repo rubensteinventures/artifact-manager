@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
 	getBrandingConfig,
 	loadBrandingConfig,
+	validateBrandingFormData,
 	saveBrandingSettings,
 	handleBrandingAssetRequest,
 	renderAccessDeniedHtml,
@@ -271,6 +272,24 @@ test('saveBrandingSettings uploads logo and favicon to R2, ignores 0-byte file i
 	assert.equal(db.row.favicon_url, null);
 	assert.equal(bucket.objects.has('_branding/logo'), false);
 	assert.equal(bucket.objects.has('_branding/favicon'), false);
+});
+
+test('validateBrandingFormData validates URLs, MIME types, file sizes, and bucket availability before admin creation', () => {
+	const validForm = new FormData();
+	validForm.set('org_url', 'https://example.com');
+	validForm.set('public_content_base_url', 'https://decks.example.com/');
+	validForm.set('logo_url', '/assets/logo.svg');
+	validForm.set('favicon_url', 'https://example.com/favicon.png');
+	validForm.set('logo_file', new File(['<svg></svg>'], 'logo.svg', { type: 'image/svg+xml' }));
+	assert.deepEqual(validateBrandingFormData(validForm, true), { ok: true });
+
+	const missingBucketRes = validateBrandingFormData(validForm, false);
+	assert.equal(missingBucketRes.ok, false);
+	assert.match(missingBucketRes.error, /Storage bucket is not configured/i);
+
+	const badForm = new FormData();
+	badForm.set('org_url', 'javascript:alert(1)');
+	assert.equal(validateBrandingFormData(badForm, true).ok, false);
 });
 
 test('saveBrandingSettings rejects unsafe URLs, oversized files, and non-image MIME types', async () => {

@@ -56,9 +56,8 @@ test('wrangler.jsonc configures DB, BUCKET, and SESSION without hardcoded vars b
 	assert.doesNotMatch(raw, /YOUR_PREVIEW_KV_NAMESPACE_ID/);
 	assert.doesNotMatch(raw, /SESSION_SECRET/);
 	assert.doesNotMatch(raw, /single-page-application/);
-	assert.doesNotMatch(raw, /911d2b94-2e1e-420b/);
-	assert.doesNotMatch(raw, /2ef80afa62094235/);
-	assert.doesNotMatch(raw, /innovaitionpartners/i);
+	assert.match(raw, /"database_id":\s*"00000000-0000-0000-0000-000000000000"/);
+	assert.match(raw, /"id":\s*"YOUR_KV_NAMESPACE_ID"/);
 });
 
 test('single D1 migration 0001_init.sql defines admins, presentations (with uploaded_at), and settings tables', () => {

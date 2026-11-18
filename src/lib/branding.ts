@@ -246,11 +246,83 @@ function validateBrandingFile(
 	return { ok: true, contentType };
 }
 
+export function validateBrandingFormData(
+	formData: FormData,
+	hasBucket = true
+): { ok: true } | { ok: false; error: string } {
+	const rawOrgUrl = readOptionalTrimmedString(formData.get('org_url'));
+	if (rawOrgUrl) {
+		const orgUrl = sanitizeHttpUrl(rawOrgUrl, { allowRootRelative: false });
+		if (!orgUrl) {
+			return {
+				ok: false,
+				error: 'Organization URL must be a valid http:// or https:// URL.',
+			};
+		}
+	}
+
+	const rawPublicBase = readOptionalTrimmedString(formData.get('public_content_base_url'));
+	if (rawPublicBase) {
+		const sanitizedBase = sanitizeHttpUrl(rawPublicBase, { allowRootRelative: false });
+		if (!sanitizedBase) {
+			return {
+				ok: false,
+				error: 'Public Content Base URL must be a valid http:// or https:// URL.',
+			};
+		}
+	}
+
+	const rawLogoUrl = readOptionalTrimmedString(formData.get('logo_url'));
+	if (formData.has('logo_url') && rawLogoUrl) {
+		const sanitizedLogo = sanitizeHttpUrl(rawLogoUrl, { allowRootRelative: true });
+		if (!sanitizedLogo) {
+			return {
+				ok: false,
+				error: 'Logo URL must be a valid http(s):// URL or root-relative path starting with /.',
+			};
+		}
+	}
+
+	const rawFaviconUrl = readOptionalTrimmedString(formData.get('favicon_url'));
+	if (formData.has('favicon_url') && rawFaviconUrl) {
+		const sanitizedFavicon = sanitizeHttpUrl(rawFaviconUrl, { allowRootRelative: true });
+		if (!sanitizedFavicon) {
+			return {
+				ok: false,
+				error: 'Favicon URL must be a valid http(s):// URL or root-relative path starting with /.',
+			};
+		}
+	}
+
+	const logoFile = extractUploadedFile(formData.get('logo_file'));
+	if (logoFile) {
+		const check = validateBrandingFile(logoFile, 'Logo');
+		if (!check.ok) return check;
+		if (!hasBucket) {
+			return { ok: false, error: 'Storage bucket is not configured for file uploads.' };
+		}
+	}
+
+	const faviconFile = extractUploadedFile(formData.get('favicon_file'));
+	if (faviconFile) {
+		const check = validateBrandingFile(faviconFile, 'Favicon');
+		if (!check.ok) return check;
+		if (!hasBucket) {
+			return { ok: false, error: 'Storage bucket is not configured for file uploads.' };
+		}
+	}
+
+	return { ok: true };
+}
+
 export async function saveBrandingSettings(
 	db: D1Database,
 	bucket: R2Bucket | undefined,
 	formData: FormData
 ): Promise<{ ok: true } | { ok: false; error: string }> {
+	const validation = validateBrandingFormData(formData, Boolean(bucket));
+	if (!validation.ok) return validation;
+
 	let existing: DbBrandingSettings | null = null;
 	try {
 		existing = await db.prepare('SELECT * FROM settings WHERE id = 1').first<DbBrandingSettings>();

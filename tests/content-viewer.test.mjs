@@ -91,8 +91,8 @@ test('authenticates protected presentation with Basic Auth (including colons in 
 	assert.equal(unauthRes.status, 401);
 	assert.equal(unauthRes.headers.get('WWW-Authenticate'), 'Basic realm="Protected Content"');
 	const unauthHtml = await unauthRes.text();
-	assert.match(unauthHtml, /Acme Studio/);
-	assert.doesNotMatch(unauthHtml, /InnovAItion/i);
+	assert.match(unauthHtml, /<span class="brand-text">Acme Studio<\/span>/);
+	assert.doesNotMatch(unauthHtml, /<span class="brand-text">Presentation Manager<\/span>/);
 
 	const badBase64Res = await handleContentRequest(
 		new Request('https://decks.example.com/content/secret/index.html', {

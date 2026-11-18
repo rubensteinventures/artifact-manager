@@ -22,6 +22,7 @@ import {
 } from '@/lib/admin-auth';
 import {
 	loadBrandingConfig,
+	validateBrandingFormData,
 	saveBrandingSettings,
 	DEFAULT_FAVICON_URL,
 } from '@/lib/branding';
@@ -109,14 +110,13 @@ if (Astro.request.method === 'POST') {
 			await recordFailedLoginAttempt(env.SESSION, clientIp);
 			error = adminValidation.error;
 		} else {
-			const brandingResult = await saveBrandingSettings(
-				env.DB,
-				env.BUCKET,
-				formData
+			const brandingValidation = validateBrandingFormData(
+				formData,
+				Boolean(env.BUCKET)
 			);
 
-			if (!brandingResult.ok) {
-				error = brandingResult.error;
+			if (!brandingValidation.ok) {
+				error = brandingValidation.error;
 			} else {
 				const result = await createInitialAdmin(
 					env.DB,
@@ -125,18 +125,25 @@ if (Astro.request.method === 'POST') {
 				);
 
 				if (result.ok) {
-					await clearLoginRateLimit(env.SESSION, clientIp);
-					await Astro.session?.regenerate();
-					Astro.session?.set('adminUsername', result.username);
-					return Astro.redirect('/admin');
-				}
-
-				if (result.alreadyInitialized) {
+					const brandingResult = await saveBrandingSettings(
+						env.DB,
+						env.BUCKET,
+						formData
+					);
+					if (!brandingResult.ok) {
+						error = brandingResult.error;
+					} else {
+						await clearLoginRateLimit(env.SESSION, clientIp);
+						await Astro.session?.regenerate();
+						Astro.session?.set('adminUsername', result.username);
+						return Astro.redirect('/admin');
+					}
+				} else if (result.alreadyInitialized) {
 					return Astro.redirect('/admin/login');
+				} else {
+					await recordFailedLoginAttempt(env.SESSION, clientIp);
+					error = result.error;
 				}
-
-				await recordFailedLoginAttempt(env.SESSION, clientIp);
-				error = result.error;
 			}
 		}
 	}

@@ -6,7 +6,7 @@ Today, hosting and administering HTML presentations on Cloudflare requires two s
 1. `presentations-worker`: Serves R2 files under `/content/{slug}/*` with per-presentation HTTP Basic Authentication backed by D1, plus a public landing page at `/`.
 2. `presentations-manager-worker`: Provides an Astro SSR + Starwind UI admin dashboard, R2 file/folder/ZIP upload manager, visitor credential configuration, and a Bearer-authenticated Skill API.
 
-The goal of this project is to combine all functionality from both applications into a **single, white-labeled Cloudflare Worker application** in `/Users/jaron/src/rubensteinventures/artifact-manager` that can be shared publicly and open-sourced. All company-specific branding, logos, and URLs are removed from source code and replaced by standard Cloudflare Worker environment variables (`vars` in `wrangler.jsonc` or dashboard variables) with clean, neutral defaults when unset.
+The goal of this project is to combine all functionality from both applications into a **single, white-labeled Cloudflare Worker application** in `artifact-manager` that can be shared publicly and open-sourced. All company-specific branding, logos, and URLs are removed from source code and replaced by standard Cloudflare Worker environment variables (`vars` in `wrangler.jsonc` or dashboard variables) with clean, neutral defaults when unset.
 
 ## 2. Goals, Non-Goals, and Anti-Goals
 
@@ -29,7 +29,7 @@ The goal of this project is to combine all functionality from both applications 
 - Maintaining React as a separate dependency solely for the static `/` landing page.
 
 ### Anti-Goals
-- **Zero Proprietary Leakage:** The codebase, configuration files, tests, seed files, skills, and README must contain **no** references to `InnovAItion Partners`, `Rubenstein Ventures`, `innovaitionpartners.com`, HubSpot CDN URLs, or real production Cloudflare resource IDs (D1 `database_id` or KV namespace `id`/`preview_id` must use clearly marked placeholders in `wrangler.jsonc`).
+- **Zero Proprietary Leakage:** The codebase, configuration files, tests, seed files, skills, and README must contain **no** references to legacy organization names, internal domains, third-party CDN URLs, or real production Cloudflare resource IDs (D1 `database_id` or KV namespace `id`/`preview_id` must use clearly marked placeholders in `wrangler.jsonc`).
 - **No Frame-Breaking on Presentations:** `/content/*` and `/` must use `X-Frame-Options: SAMEORIGIN` so presentations can embed same-origin iframes/assets, whereas `/admin/*` must enforce `X-Frame-Options: DENY`.
 - **No Auth Cross-Contamination:** Unauthenticated requests to `/` or `/content/*` must never redirect to `/admin/login`, and `/content/*` must never fall through to static asset serving.
 

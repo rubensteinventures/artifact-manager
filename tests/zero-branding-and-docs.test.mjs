@@ -106,6 +106,8 @@ test('README.md documents new Cloudflare account setup, branding variables, and 
 		readme,
 		/https:\/\/deploy\.workers\.cloudflare\.com\/\?url=https:\/\/github\.com\/rubensteinventures\/artifact-manager/
 	);
+	assert.match(readme, /docs\/brag\/brag\.mp4/);
+	assert.match(readme, /docs\/brag\/brag\.jpg/);
 	assert.match(readme, /\/admin\/setup/);
 	assert.match(readme, /\/admin\/settings/);
 	assert.match(readme, /ADMIN_USERNAME/);

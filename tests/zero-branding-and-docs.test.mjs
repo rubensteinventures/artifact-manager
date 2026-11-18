@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,6 +17,42 @@ const IGNORED_DIRS = new Set([
 	'.gemini_security',
 ]);
 
+const BINARY_EXTENSIONS = new Set([
+	'.mp4',
+	'.mp3',
+	'.ogg',
+	'.jpg',
+	'.jpeg',
+	'.png',
+	'.gif',
+	'.webp',
+	'.ico',
+	'.woff',
+	'.woff2',
+	'.ttf',
+	'.pdf',
+]);
+
+// 16-char SHA-256 prefixes of forbidden legacy company/domain/CDN/UUID tokens
+const FORBIDDEN_TOKEN_HASH_PREFIXES = new Set([
+	'b1eb3d94fd18ab0a', // legacy org token
+	'9b48adb2537663c5', // legacy domain token
+	'dd4327cd38e05af1', // legacy owner token (outside GitHub repo URL)
+	'878683fc69dd52e9', // legacy CDN host token
+	'5024df61056765e3', // legacy CDN account ID
+	'651430c4c5f6a765', // legacy D1 UUID prefix
+	'1a28743eeec50d11', // legacy D1 UUID short prefix
+	'6c60f166cc158617', // legacy D1 UUID
+	'69b20ed897a2965c', // legacy KV ID prefix
+	'61e16e42b350c676', // legacy KV ID
+	'f9c5e2600c62e584', // legacy preview KV ID prefix
+	'0d59c032caa8fa29', // legacy preview KV ID
+]);
+
+function sha256Prefix16(token) {
+	return crypto.createHash('sha256').update(token.toLowerCase()).digest('hex').slice(0, 16);
+}
+
 function walkFiles(dir, out = []) {
 	for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
 		if (IGNORED_DIRS.has(entry.name)) continue;
@@ -29,36 +66,35 @@ function walkFiles(dir, out = []) {
 	return out;
 }
 
-test('entire repository contains zero proprietary branding or legacy Cloudflare resource IDs', () => {
-	const forbiddenPatterns = [
-		/innovaition/i,
-		/rubenstein/i,
-		/hubspotusercontent/i,
-		/49211790/,
-		/911d2b94-2e1e-420b/,
-		/2ef80afa62094235/,
-		/674f4ecd29424e74/,
-	];
-
+test('entire repository contains zero proprietary branding, legacy Cloudflare resource IDs, or developer local filesystem paths', () => {
 	const allFiles = walkFiles(rootDir).filter(
-		(f) =>
-			!f.endsWith('tests/zero-branding-and-docs.test.mjs') &&
-			!f.endsWith('tests/config.test.mjs') &&
-			!f.endsWith('tests/content-viewer.test.mjs') &&
-			!f.includes('docs/superpowers/')
+		(f) => !BINARY_EXTENSIONS.has(path.extname(f).toLowerCase())
 	);
 
+	const localHomePathRegex = new RegExp('/' + 'Users/[a-zA-Z0-9._-]+');
+
 	for (const file of allFiles) {
+		const relPath = path.relative(rootDir, file);
 		const rawContent = fs.readFileSync(file, 'utf8');
 		const content = rawContent.replaceAll(
 			'https://github.com/rubensteinventures/artifact-manager',
 			''
 		);
-		for (const pattern of forbiddenPatterns) {
-			assert.doesNotMatch(
-				content,
-				pattern,
-				`Forbidden pattern ${pattern} found in ${path.relative(rootDir, file)}`
+
+		assert.doesNotMatch(
+			content,
+			localHomePathRegex,
+			`Developer local filesystem path found in ${relPath}`
+		);
+
+		const tokens = content.match(/[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)*/g) ?? [];
+		for (const token of tokens) {
+			if (token.length < 4) continue;
+			const hashPrefix = sha256Prefix16(token);
+			assert.equal(
+				FORBIDDEN_TOKEN_HASH_PREFIXES.has(hashPrefix),
+				false,
+				`Forbidden legacy identifier token "${token}" found in ${relPath}`
 			);
 		}
 	}

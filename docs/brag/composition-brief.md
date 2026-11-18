@@ -64,7 +64,7 @@ Scene summary:
 - Audio arc: Smooth fade-in at `0.0s`, steady groove across the dashboard and file-manager walkthrough, resonant bell lockup at `17.47s`, clean fade-out to `20.0s`
 - Music: `happy-beats-business-moves-vol-12-by-ende-dot-app.mp3`
 - Music treatment: `data-volume="0.34"`, fade in `0.0s–0.6s`, fade out `18.2s–20.0s`
-- Music cue guidance: Bundled preset `/Users/jaron/.gemini/config/skills/brag/assets/music/cues/happy-beats-business-moves-vol-12-by-ende-dot-app.music-cues.json` (109.96 BPM). Target strong cues: `8.74s` (Scene 3 transition), `10.93s` (`Generate passphrase` click), `17.47s` (Scene 4 final lockup). Beat grid for Scene 2 rows: `4.91s`, `5.45s`, `6.00s`.
+- Music cue guidance: Bundled preset `skills/brag/assets/music/cues/happy-beats-business-moves-vol-12-by-ende-dot-app.music-cues.json` (109.96 BPM). Target strong cues: `8.74s` (Scene 3 transition), `10.93s` (`Generate passphrase` click), `17.47s` (Scene 4 final lockup). Beat grid for Scene 2 rows: `4.91s`, `5.45s`, `6.00s`.
 - Audio-reactive treatment: Subtle; use pre-extracted music RMS/bass (`extract-audio-data.py`) to gently modulate background radial glow scale (`1.0`–`1.08`) and card highlight presence.
 - Audio-coupled moments:
   - `0.20s` — Hero reveal (`impact/impactSoft_medium_001.ogg`)
@@ -72,5 +72,5 @@ Scene summary:
   - `8.74s` — Scene 3 split-view transition (`impact/impactSoft_medium_002.ogg`)
   - `10.93s` — Cursor clicks `Generate passphrase` (`interface/click_003.ogg`)
   - `17.47s` — Final `Presentation Manager` lockup (`impact/impactBell_heavy_000.ogg`)
-- SFX selection guidance: Low/medium HF risk files from `/Users/jaron/.gemini/config/skills/brag/assets/sfx/sfx-analysis.md`.
+- SFX selection guidance: Low/medium HF risk files from `skills/brag/assets/sfx/sfx-analysis.md`.
 - Audio files: Copy into `brag-output/composition/assets/music/` and `brag-output/composition/assets/sfx/`.
